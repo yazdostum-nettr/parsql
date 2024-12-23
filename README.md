@@ -1,9 +1,17 @@
 # parsql
 Deneyimsel sql yardımcısı
 
+### Küfe'nin yüklenmesi
+
+Uygulamanıza küfeyi yüklerken hangi veritabanı ile çalışacağınızı 'feature' olarak belirtmeniz gerekiyor. Örneğin 'postgresql' ile çalışacaksanız ve 'tokio' runtime kullanıyorsanız, Cargo.toml dosyanıza paketi aşağıdaki şekilde eklemeniz gerekiyor;
+
+```rust
+parsql = { version = "0.1.1", features = ["tokio-postgres"] }
+```
+
 ### Ne işe yarar?
 
-Temel sql cümleciklerinin direkt "struct" üzerinden yönetilebilmesini sağlayacak, "generic crud" işlemlerini kullanılabilir hale getiren yardımcı makro, trait ve fonksiyonlar içerir.
+Temel sql cümleciklerinin direkt "struct" üzerinden yönetilebilmesini sağlayacak, küfe içindeki "generic crud" işlemlerini kullanılabilir hale getiren yardımcı makro, trait ve fonksiyonlar içerir.
 
 Örneğin;
 
@@ -20,6 +28,13 @@ pub struct GetUser {
 ```
 
 gibi bir procedural makro kullanımı ile, desteklenen (şimdilik sqlite ve postgresql) veritabanlarında küfe'de tanımlanan "get" fonksiyonunu, bu "struct" için uygulayabilir hale getirmiş oluyoruz.
+
+yukarıdaki gibi bir struct tanımlaması yaptıktan sonra eklemeniz gereken toplam 5 adet bağımlılık söz konusu;
+
+```rust
+use parsql::{core::Queryable, macros::Queryable, tokio_postgres::{get, SqlParams}};
+use tokio_postgres::types::ToSql;
+```
 
 Şunun gibi;
 
