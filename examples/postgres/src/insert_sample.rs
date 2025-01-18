@@ -1,9 +1,9 @@
 use parsql::{
     core::Insertable,
     macros::{Insertable, SqlParams},
-    tokio_postgres::SqlParams,
+    postgres::SqlParams,
 };
-use tokio_postgres::types::ToSql;
+use postgres::types::ToSql;
 
 #[derive(Insertable, SqlParams)]
 #[table_name("users")]

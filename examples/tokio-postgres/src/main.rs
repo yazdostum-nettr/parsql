@@ -30,7 +30,7 @@ async fn main() {
     println!("Insert result: {:?}", insert_result);
 
     let update_user = UpdateUser {
-        id: 1,
+        id: 24025,
         name: String::from("Ali"),
         email: String::from("ali@gmail.com"),
         state: 2,
@@ -45,16 +45,8 @@ async fn main() {
 
     println!("Delete result: {:?}", delete_result);
 
-    let get_user = GetUser::new(1);
-    let get_result = get(&client, get_user, |row| {
-        Ok(GetUser {
-            id: row.get(0),
-            name: row.get(1),
-            email: row.get(2),
-            state: row.get(3),
-        })
-    })
-    .await;
+    let get_user = GetUser::new(24025);
+    let get_result = get(&client, get_user).await;
 
     println!("Get result: {:?}", get_result);
 }

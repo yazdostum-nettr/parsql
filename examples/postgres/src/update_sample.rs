@@ -1,5 +1,9 @@
-use parsql::{core::Updateable, macros::{Updateable, UpdateParams}, tokio_postgres::UpdateParams};
-use tokio_postgres::types::ToSql;
+use parsql::{
+    core::Updateable,
+    macros::{UpdateParams, Updateable},
+    postgres::UpdateParams,
+};
+use postgres::types::ToSql;
 
 #[derive(Updateable, UpdateParams)]
 #[table_name("users")]
