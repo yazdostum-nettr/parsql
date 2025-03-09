@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2025-03-09
+
+### 🚜 Refactor
+
+- Yapıda genel düzenleme çalışmaları yapıldı.
+- FromRow makrosu üzerinde bazı düzenleme ve iyileştirmeler yapıldı.
+- 'Deleteable' ifadesi 'Deletable' olarak değiştirildi ve dökümantasyon ingilizceye çevirildi.
+
+### 📚 Documentation
+
+- CHANGELOG.md güncellendi.
+- Genel olarak proje belgeleri yeni versiyona göre güncellendi ve re-organize edildi.
+- Paketlerdeki metodların yorumları yeni geliştirmelere göre güncellendi.
+
 ## [0.3.0] - 2025-03-07
 
 ### 🚀 Features
