@@ -2,9 +2,9 @@ use std::default;
 
 use example_parsql_postgres::{
     insert_sample::{InsertComment, InsertPost},
-    InsertUser, SelectUser, SelectUserWithPosts, UpdateUser, UserStateStats, UserPostStats,
+    DeleteUser, InsertUser, SelectUser, SelectUserWithPosts, UpdateUser, UserStateStats, UserPostStats,
 };
-use parsql::postgres::{get, get_all, insert, select, update};
+use parsql::postgres::{get_all, insert, select, update, delete};
 use postgres::{Client, NoTls};
 
 fn init_connection() -> Client {
@@ -155,4 +155,20 @@ fn main() {
     let user_post_stats = UserPostStats::new(0);
     let post_stats_result = get_all(&mut db, &user_post_stats);
     println!("User post stats: {:?}", post_stats_result);
+
+    // 3. Silme İşlemleri
+    println!("\n3. Silme İşlemleri:");
+    
+    // Önce bu kullanıcının gönderilerini siliyoruz
+    let user_id = 3_i32;
+    let posts_deleted = db.execute("DELETE FROM comments WHERE post_id IN (SELECT id FROM posts WHERE user_id = $1)", &[&user_id]).expect("Yorumları silme hatası");
+    println!("Silinen yorum sayısı: {}", posts_deleted);
+    
+    let posts_deleted = db.execute("DELETE FROM posts WHERE user_id = $1", &[&user_id]).expect("Gönderileri silme hatası");
+    println!("Silinen gönderi sayısı: {}", posts_deleted);
+    
+    // Şimdi kullanıcıyı silebiliriz
+    let user_to_delete = DeleteUser { id: user_id };
+    let deleted_count = delete(&mut db, user_to_delete).expect("Kullanıcı silme hatası");
+    println!("Silinen kullanıcı sayısı: {}", deleted_count);
 }

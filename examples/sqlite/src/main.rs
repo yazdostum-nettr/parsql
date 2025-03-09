@@ -1,6 +1,6 @@
 use parsql::{
-    macros::{FromRow, Insertable, Queryable, SqlParams, UpdateParams, Updateable},
-    sqlite::{get, insert, update, FromRow, SqlParams, UpdateParams, SqlQuery},
+    macros::{FromRow, Insertable, Queryable, SqlParams, UpdateParams, Updateable, Deletable},
+    sqlite::{get, insert, update, delete, FromRow, SqlParams, UpdateParams, SqlQuery},
 };
 use rusqlite::{types::ToSql, Connection, Row, Result, Error};
 
@@ -67,6 +67,13 @@ impl UserPostStatsAdvanced {
             avg_post_id: None,
         }
     }
+}
+
+#[derive(Deletable, SqlParams)]
+#[table("users")]
+#[where_clause("id = $")]
+pub struct DeleteUser {
+    pub id: i64,
 }
 
 fn main() {
@@ -212,4 +219,10 @@ fn main() {
     //         Err(e) => println!("  Satır okuma hatası: {}", e),
     //     }
     // }
+
+    // DELETE işlemi (doğrudan SQL sorgusu ile)
+    let user_id_to_delete = 3;
+    let delete_user = DeleteUser { id: user_id_to_delete };
+    let deleted_rows = delete(&conn, delete_user);  
+    println!("Silinen satır sayısı: {:?}", deleted_rows);
 }
