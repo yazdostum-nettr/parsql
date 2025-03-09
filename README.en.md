@@ -26,22 +26,22 @@ When adding the crate to your application, you need to specify which database yo
 
 ### For SQLite
 ```rust
-parsql = { version = "0.3.0", features = ["sqlite"] }
+parsql = { version = "0.3.1", features = ["sqlite"] }
 ```
 
 ### For PostgreSQL
 ```rust
-parsql = { version = "0.3.0", features = ["postgres"] }
+parsql = { version = "0.3.1", features = ["postgres"] }
 ```
 
 ### For Tokio PostgreSQL
 ```rust
-parsql = { version = "0.3.0", features = ["tokio-postgres"] }
+parsql = { version = "0.3.1", features = ["tokio-postgres"] }
 ```
 
 ### For Deadpool PostgreSQL connection pool
 ```rust
-parsql = { version = "0.3.0", features = ["deadpool-postgres"] }
+parsql = { version = "0.3.1", features = ["deadpool-postgres"] }
 ```
 
 ## Core Features
