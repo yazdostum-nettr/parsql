@@ -26,22 +26,22 @@ Uygulamanıza küfeyi yüklerken hangi veritabanı ile çalışacağınızı 'fe
 
 ### SQLite için
 ```rust
-parsql = { version = "0.3.1", features = ["sqlite"] }
+parsql = { version = "0.3.2", features = ["sqlite"] }
 ```
 
 ### PostgreSQL için
 ```rust
-parsql = { version = "0.3.1", features = ["postgres"] }
+parsql = { version = "0.3.2", features = ["postgres"] }
 ```
 
 ### Tokio PostgreSQL için
 ```rust
-parsql = { version = "0.3.1", features = ["tokio-postgres"] }
+parsql = { version = "0.3.2", features = ["tokio-postgres"] }
 ```
 
 ### Deadpool PostgreSQL bağlantı havuzu için
 ```rust
-parsql = { version = "0.3.1", features = ["deadpool-postgres"] }
+parsql = { version = "0.3.2", features = ["deadpool-postgres"] }
 ```
 
 ## Temel Özellikler

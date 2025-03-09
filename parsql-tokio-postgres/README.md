@@ -53,18 +53,18 @@ Cargo.toml dosyanıza şu şekilde ekleyin:
 ```toml
 [dependencies]
 # Tokio PostgreSQL için
-parsql = { version = "0.3.0", features = ["tokio-postgres"] }
+parsql = { version = "0.3.2", features = ["tokio-postgres"] }
 
 # veya deadpool bağlantı havuzu ile kullanmak için
-parsql = { version = "0.3.0", features = ["deadpool-postgres"] }
+parsql = { version = "0.3.2", features = ["deadpool-postgres"] }
 ```
 
 veya doğrudan bu paketi kullanmak isterseniz:
 
 ```toml
 [dependencies]
-parsql-tokio-postgres = "0.3.0"
-parsql-macros = "0.3.0"
+parsql-tokio-postgres = "0.3.2"
+parsql-macros = "0.3.2"
 tokio-postgres = "0.7"
 tokio = { version = "1", features = ["full"] }
 

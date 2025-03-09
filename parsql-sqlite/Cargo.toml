@@ -9,7 +9,7 @@ repository.workspace = true
 
 [dependencies]
 rusqlite = { version = "0.34.0" }
-parsql-macros = { version = "0.3.1", features = ["sqlite"] }
+parsql-macros = { version = "0.3.2", features = ["sqlite"] }
 
 # [dependencies.parsql-macros]
 # workspace = true
