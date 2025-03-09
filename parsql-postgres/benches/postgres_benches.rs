@@ -1,11 +1,10 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use parsql_core::{Insertable, Queryable};
 use parsql_macros::{Insertable, FromRow, Queryable, SqlParams};
-use parsql_postgres::{ get, insert, FromRow, SqlParams};
-use postgres::{types::ToSql, Client, NoTls, Row};
+use parsql_postgres::{ get, insert, FromRow, SqlParams, SqlQuery};
+use postgres::{types::ToSql, Client, NoTls, Row, Error};
 
 #[derive(Insertable, SqlParams)]
-#[table_name("users")]
+#[table("users")]
 pub struct InsertUser {
     pub name: String,
     pub email: String,
@@ -13,7 +12,7 @@ pub struct InsertUser {
 }
 
 #[derive(Queryable, FromRow, SqlParams)]
-#[table_name("users")]
+#[table("users")]
 #[where_clause("id = $")]
 pub struct GetUser{
     pub id: i32,
@@ -63,7 +62,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 email: "SampleEmail".to_string(),
                 state: 1,
             });
-            let _ = get(&mut db, user);
+            let _ = get(&mut db, &user);
         })
     });
 }

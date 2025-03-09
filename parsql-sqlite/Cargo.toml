@@ -8,13 +8,12 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
-rusqlite = { version = "0.32.1" }
+rusqlite = { version = "0.34.0" }
+parsql-macros = { version = "0.3.1", features = ["sqlite"] }
 
-[dependencies.parsql-core]
-workspace = true
-
-[dependencies.parsql-macros]
-workspace = true
+# [dependencies.parsql-macros]
+# workspace = true
+# features = ["sqlite"]
 
 [dev-dependencies]
 criterion = { version = "0.5.1", features = ["html_reports"] }

@@ -1,16 +1,15 @@
 use parsql::{
-    core::Updateable,
     macros::{UpdateParams, Updateable},
-    postgres::UpdateParams,
+    postgres::{SqlQuery, UpdateParams},
 };
 use postgres::types::ToSql;
 
 #[derive(Updateable, UpdateParams)]
-#[table_name("users")]
-#[update_clause("name, email")]
+#[table("users")]
+#[update("name, email")]
 #[where_clause("id = $")]
 pub struct UpdateUser {
-    pub id: i64,
+    pub id: i32,
     pub name: String,
     pub email: String,
     pub state: i16,
