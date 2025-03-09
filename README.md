@@ -54,6 +54,35 @@ Parsql, veritabanı işlemlerini kolaylaştırmak için çeşitli procedural mak
 - `#[derive(Updateable)]` - Güncelleme işlemleri için
 - `#[derive(FromRow)]` - Veritabanı sonuçlarını nesnelere dönüştürmek için
 
+### Güvenlik Özellikleri
+
+#### SQL Injection Koruması
+Parsql, SQL injection saldırılarına karşı güvenli bir şekilde tasarlanmıştır:
+
+- Parametreli sorgular otomatik olarak kullanılır, asla direk string birleştirme yapılmaz
+- Tüm kullanıcı girdileri güvenli bir şekilde parametrize edilir
+- Makrolar, SQL parametrelerini doğru bir şekilde işler ve güvenli bir format sağlar
+- Her veritabanı adaptörü için uygun parametre işaretleyiciler (`$1`, `?`, vb.) otomatik olarak uygulanır
+- SQL yazarken elle string birleştirme gereksinimi ortadan kaldırılmıştır
+
+```rust
+// Güvenli parametre kullanımı örneği
+#[derive(Queryable, FromRow, SqlParams)]
+#[table("users")]
+#[where_clause("username = $ AND status = $")]
+struct UserQuery {
+    username: String,
+    status: String,
+}
+
+// Parametreler güvenli bir şekilde yerleştirilir, 
+// SQL injection riski olmaz
+let query = UserQuery {
+    username: user_input,
+    status: "active",
+};
+```
+
 ### Öznitelikler
 Sorgularınızı özelleştirmek için çeşitli öznitelikler kullanabilirsiniz:
 

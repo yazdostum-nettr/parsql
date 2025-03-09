@@ -54,6 +54,35 @@ Parsql offers various procedural macros to facilitate database operations:
 - `#[derive(Updateable)]` - For update operations
 - `#[derive(FromRow)]` - For converting database results to objects
 
+### Security Features
+
+#### SQL Injection Protection
+Parsql is designed to be secure against SQL injection attacks:
+
+- Parameterized queries are automatically used, never direct string concatenation
+- All user inputs are safely parameterized
+- Macros process SQL parameters correctly and provide a secure format
+- Appropriate parameter placeholders (`$1`, `?`, etc.) are automatically applied for each database adapter
+- The need for manual string concatenation when writing SQL is eliminated
+
+```rust
+// Example of secure parameter usage
+#[derive(Queryable, FromRow, SqlParams)]
+#[table("users")]
+#[where_clause("username = $ AND status = $")]
+struct UserQuery {
+    username: String,
+    status: String,
+}
+
+// Parameters are securely placed,
+// no risk of SQL injection
+let query = UserQuery {
+    username: user_input,
+    status: "active",
+};
+```
+
 ### Attributes
 You can use various attributes to customize your queries:
 

@@ -10,6 +10,41 @@ Tokio PostgreSQL integration crate for parsql. This package provides asynchronou
 - Generic CRUD operations (get, insert, update, delete)
 - Conversion of database rows to structs
 - Deadpool connection pool support
+- Automatic protection against SQL Injection attacks
+
+## Security Features
+
+### SQL Injection Protection
+
+parsql-tokio-postgres is designed to be secure against SQL Injection attacks:
+
+- All user inputs are automatically parameterized
+- PostgreSQL's "$1, $2, ..." parameterization structure is used automatically
+- Macros process SQL parameters securely, providing protection against injection attacks
+- Parameters are automatically managed to ensure correct order and type
+- User inputs in `#[where_clause]` and other SQL components are always parameterized
+- Security measures are fully maintained even in asynchronous contexts
+
+```rust
+// SQL injection protection example
+#[derive(Queryable, FromRow, SqlParams)]
+#[table("users")]
+#[where_clause("username = $ AND status = $")]
+struct UserQuery {
+    username: String,
+    status: i32,
+}
+
+// User input (potentially harmful) is used safely
+let query = UserQuery {
+    username: user_input, // This value is not directly inserted into SQL, it's parameterized
+    status: 1,
+};
+
+// Generated query: "SELECT * FROM users WHERE username = $1 AND status = $2"
+// Parameters are safely sent as: [user_input, 1]
+let user = get(&client, query).await?;
+```
 
 ## Installation
 
