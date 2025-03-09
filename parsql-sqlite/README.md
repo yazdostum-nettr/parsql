@@ -9,6 +9,40 @@ Parsql için SQLite entegrasyon küfesidir. Bu paket, parsql'in SQLite veritaban
 - Güvenli parametre yönetimi
 - Generic CRUD işlemleri (get, insert, update)
 - Veritabanı satırlarını struct'lara dönüştürme
+- SQL Injection saldırılarına karşı otomatik koruma
+
+## Güvenlik Özellikleri
+
+### SQL Injection Koruması
+
+parsql-sqlite, SQL Injection saldırılarına karşı güvenli bir şekilde tasarlanmıştır:
+
+- Tüm kullanıcı girdileri otomatik olarak parametrize edilir
+- SQLite'ın "?" parametrelendirme yapısı otomatik olarak kullanılır
+- Makrolar, SQL parametrelerini güvenli bir şekilde işleyerek injection saldırılarına karşı koruma sağlar
+- Parametrelerin doğru sırada ve tipte gönderilmesi otomatik olarak yönetilir
+- `#[where_clause]` ve diğer SQL bileşenlerinde kullanıcı girdileri her zaman parametrize edilir
+
+```rust
+// SQL injection koruması örneği
+#[derive(Queryable, FromRow, SqlParams)]
+#[table("users")]
+#[where_clause("username = ? AND status = ?")]
+struct UserQuery {
+    username: String,
+    status: i32,
+}
+
+// Kullanıcı girdisi (potansiyel olarak zararlı) güvenle kullanılır
+let query = UserQuery {
+    username: kullanici_girdisi, // Bu değer direkt SQL'e eklenmez, parametrize edilir
+    status: 1,
+};
+
+// Oluşturulan sorgu: "SELECT * FROM users WHERE username = ? AND status = ?"
+// Parametreler güvenli bir şekilde: [kullanici_girdisi, 1] olarak gönderilir
+let user = get(&conn, query)?;
+```
 
 ## Kurulum
 

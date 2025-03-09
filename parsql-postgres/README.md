@@ -9,6 +9,40 @@ Parsql için PostgreSQL entegrasyon küfesidir. Bu paket, parsql'in PostgreSQL v
 - Güvenli parametre yönetimi
 - Generic CRUD işlemleri (get, insert, update, delete)
 - Veritabanı satırlarını struct'lara dönüştürme
+- SQL Injection saldırılarına karşı otomatik koruma
+
+## Güvenlik Özellikleri
+
+### SQL Injection Koruması
+
+parsql-postgres, SQL Injection saldırılarına karşı güvenli bir şekilde tasarlanmıştır:
+
+- Tüm kullanıcı girdileri otomatik olarak parametrize edilir
+- PostgreSQL'in "$1, $2, ..." parametrelendirme yapısı otomatik olarak kullanılır
+- Makrolar, SQL parametrelerini güvenli bir şekilde işleyerek injection saldırılarına karşı koruma sağlar
+- Parametrelerin doğru sırada ve tipte gönderilmesi otomatik olarak yönetilir
+- `#[where_clause]` ve diğer SQL bileşenlerinde kullanıcı girdileri her zaman parametrize edilir
+
+```rust
+// SQL injection koruması örneği
+#[derive(Queryable, FromRow, SqlParams)]
+#[table("users")]
+#[where_clause("username = $ AND status = $")]
+struct UserQuery {
+    username: String,
+    status: i32,
+}
+
+// Kullanıcı girdisi (potansiyel olarak zararlı) güvenle kullanılır
+let query = UserQuery {
+    username: kullanici_girdisi, // Bu değer direkt SQL'e eklenmez, parametrize edilir
+    status: 1,
+};
+
+// Oluşturulan sorgu: "SELECT * FROM users WHERE username = $1 AND status = $2"
+// Parametreler güvenli bir şekilde: [kullanici_girdisi, 1] olarak gönderilir
+let user = get(&conn, query)?;
+```
 
 ## Kurulum
 
@@ -148,195 +182,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Veri Güncelleme (Update) İşlemi
 
-```rust
-use parsql::{
-    core::Updateable,
-    macros::{UpdateParams, Updateable},
-    postgres::{UpdateParams, update},
-};
-use postgres::types::ToSql;
-
-#[derive(Updateable, UpdateParams)]
-#[table("users")]
-#[update("name, email")]
-#[where_clause("id = $")]
-pub struct UpdateUser {
-    pub id: i64,
-    pub name: String,
-    pub email: String,
-    pub state: i16,
-}
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = Client::connect(
-        "host=localhost user=postgres password=postgres dbname=test",
-        NoTls,
-    )?;
-    
-    let update_user = UpdateUser {
-        id: 1,
-        name: String::from("Ali Güncellendi"),
-        email: String::from("ali.updated@gmail.com"),
-        state: 2,
-    };
-    
-    let result = update(&mut client, update_user)?;
-    println!("Güncellenen kayıt sayısı: {}", result);
-    
-    Ok(())
-}
 ```
-
-### Veri Silme (Delete) İşlemi
-
-```rust
-use parsql::{
-    core::Deletable,
-    macros::{Deletable, SqlParams},
-    postgres::{SqlParams, delete},
-};
-use postgres::types::ToSql;
-
-#[derive(Deletable, SqlParams)]
-#[table("users")]
-#[where_clause("id = $")]
-pub struct DeleteUser {
-    pub id: i64,
-}
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = Client::connect(
-        "host=localhost user=postgres password=postgres dbname=test",
-        NoTls,
-    )?;
-    
-    let delete_user = DeleteUser { id: 1 };
-    let result = delete(&mut client, delete_user)?;
-    
-    println!("Silinen kayıt sayısı: {}", result);
-    Ok(())
-}
-```
-
-## İşlem (Transaction) Kullanımı
-
-Standard postgres kütüphanesindeki Transaction özelliğini kullanabilirsiniz:
-
-```rust
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = Client::connect(
-        "host=localhost user=postgres password=postgres dbname=test",
-        NoTls,
-    )?;
-    
-    // İşlem başlat
-    let mut tx = client.transaction()?;
-    
-    // İşlem içinde sorgu yap
-    let insert_user = InsertUser {
-        name: "Mehmet".to_string(),
-        email: "mehmet@parsql.com".to_string(),
-        state: 1,
-    };
-    
-    let id = insert(&mut tx, insert_user)?;
-    
-    // İşlemi tamamla
-    tx.commit()?;
-    
-    println!("Ekleme işlemi başarılı, ID: {}", id);
-    Ok(())
-}
-```
-
-## Gelişmiş Özellikler
-
-### Join Kullanımı
-
-```rust
-#[derive(Queryable, FromRow, SqlParams, Debug)]
-#[table("users")]
-#[select("users.id, users.name, posts.title as post_title")]
-#[join("LEFT JOIN posts ON users.id = posts.user_id")]
-#[where_clause("users.id = $")]
-pub struct UserWithPosts {
-    pub id: i64,
-    pub name: String,
-    pub post_title: Option<String>,
-}
-```
-
-### Gruplama ve Sıralama
-
-```rust
-#[derive(Queryable, FromRow, SqlParams, Debug)]
-#[table("users")]
-#[select("state, COUNT(*) as user_count")]
-#[group_by("state")]
-#[order_by("user_count DESC")]
-#[having("COUNT(*) > 5")]
-pub struct UserStats {
-    pub state: i16,
-    pub user_count: i64,
-}
-```
-
-### Özel Select İfadeleri
-
-```rust
-#[derive(Queryable, FromRow, SqlParams, Debug)]
-#[table("users")]
-#[select("id, name, email, CASE WHEN state = 1 THEN 'Aktif' ELSE 'Pasif' END as status")]
-#[where_clause("id = $")]
-pub struct UserWithStatus {
-    pub id: i64,
-    pub name: String,
-    pub email: String,
-    pub status: String,
-}
-```
-
-## SQL Sorgularını İzleme
-
-Oluşturulan SQL sorgularını görmek için `PARSQL_TRACE` çevre değişkenini ayarlayabilirsiniz:
-
-```sh
-PARSQL_TRACE=1 cargo run
-```
-
-Bu, postgres için oluşturulan tüm sorguları konsola yazdıracaktır.
-
-## Tokio-Postgres ile Farklar
-
-Bu paketteki en önemli fark, tokio-postgres paketinin aksine bu paketin **senkron** API kullanmasıdır:
-
-1. **Senkron İşlemler**: Bu paket, async/await kullanmaz ve senkron işlemler yapar.
-2. **İstemci Referansı**: Fonksiyonlara istemciyi `&mut client` olarak iletmeniz gerekir.
-3. **Tokio Runtime Gerektirmez**: Tokio runtime'a ihtiyaç duymadan kullanabilirsiniz.
-
-## Performans İpuçları
-
-1. **Prepared Statements**: postgres, sorguları prepared statement olarak çalıştırır ve parsql bu özelliği kullanır, bu SQL enjeksiyon saldırılarına karşı korunmanıza yardımcı olur.
-
-2. **Toplu İşlemler**: Birden çok işlemi Transaction içinde yapın:
-
-   ```rust
-   let mut tx = client.transaction()?;
-   // İşlemlerinizi burada yapın
-   tx.commit()?;
-   ```
-
-## Hata Yakalama
-
-İşlemler sırasında oluşabilecek hataları yakalamak ve işlemek için Rust'ın `Result` mekanizmasını kullanın:
-
-```rust
-match get(&mut client, get_user) {
-    Ok(user) => println!("Kullanıcı bulundu: {:?}", user),
-    Err(e) => eprintln!("Hata oluştu: {}", e),
-}
-```
-
-## Tam Örnek Proje
-
-Tam bir örnek proje için parsql ana deposundaki [examples/postgres](../examples/postgres) dizinine bakabilirsiniz.
