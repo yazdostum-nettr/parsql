@@ -1,8 +1,10 @@
 // use parsql_core::{Deleteable, Insertable, Queryable, Updateable};
 use deadpool_postgres::Transaction;
-use tokio_postgres::{types::ToSql, Row, Error};
+use tokio_postgres::Error;
+// Makrolar sadece dokümantasyon için kullanılıyor, gerçek kodda SqlQuery kullanılmalı
+// use parsql_macros::{Insertable, Updateable};
 
-use crate::SqlParams;
+use crate::{SqlQuery, SqlParams};
 
 /// # tx_update
 /// 
@@ -55,28 +57,17 @@ use crate::SqlParams;
 ///     Ok(())
 /// }
 /// ```
-pub async fn tx_update<T: Updateable + SqlParams>(
+pub async fn tx_update<T: SqlQuery + SqlParams>(
     transaction: Transaction<'_>,
     entity: T,
 ) -> Result<(Transaction<'_>, u64), Error> {
-    let table = T::table();
-    let columns = T::updated_columns();
-    let where_clause = T::where_clause();
-
-    let update = columns
-        .iter()
-        .enumerate()
-        .map(|(i, col)| format!("{} = ${}", col, i + 1))
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    let sql = format!(
-        "UPDATE {} SET {} WHERE {}",
-        table, update, where_clause
-    );
+    let sql = T::query();
+    
+    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+        println!("[PARSQL-TOKIO-POSTGRES-TX] Execute SQL: {}", sql);
+    }
 
     let params = entity.params();
-
     let result = transaction.execute(&sql, &params).await?;
     Ok((transaction, result))
 }
@@ -130,24 +121,17 @@ pub async fn tx_update<T: Updateable + SqlParams>(
 ///     Ok(())
 /// }
 /// ```
-pub async fn tx_insert<T: Insertable + SqlParams>(
+pub async fn tx_insert<T: SqlQuery + SqlParams>(
     transaction: Transaction<'_>,
     entity: T,
 ) -> Result<(Transaction<'_>, u64), Error> {
-    let table = T::table();
-    let columns = T::columns().join(", ");
-    let placeholders = (1..=T::columns().len())
-        .map(|i| format!("${}", i))
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    let sql = format!(
-        "INSERT INTO {} ({}) VALUES ({})",
-        table, columns, placeholders
-    );
+    let sql = T::query();
+    
+    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+        println!("[PARSQL-TOKIO-POSTGRES-TX] Execute SQL: {}", sql);
+    }
 
     let params = entity.params();
-
     let result = transaction.execute(&sql, &params).await?;
     Ok((transaction, result))
 }

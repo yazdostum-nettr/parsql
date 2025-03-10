@@ -9,14 +9,16 @@
 //! - Automatic SQL query generation
 //! - Secure parameter management
 //! - Generic CRUD operations
-//! - Connection pooling with deadpool-postgres
-//! - Transaction support
+//! - Deadpool connection pool support
+//! - SQL Injection protection
+//! - Detailed error reporting
 //! 
 //! ## Usage
 //! 
 //! ```rust,no_run
 //! use tokio_postgres::{NoTls, Error};
 //! use parsql::tokio_postgres::{get, insert};
+//! use parsql::macros::{Insertable, Queryable, SqlParams, FromRow};
 //! 
 //! #[derive(Insertable, SqlParams)]
 //! #[table("users")]
@@ -32,6 +34,16 @@
 //!     pub id: i32,
 //!     pub name: String,
 //!     pub email: String,
+//! }
+//! 
+//! impl GetUser {
+//!     pub fn new(id: i32) -> Self {
+//!         Self {
+//!             id,
+//!             name: Default::default(),
+//!             email: Default::default(),
+//!         }
+//!     }
 //! }
 //! 
 //! #[tokio::main]
@@ -57,7 +69,7 @@
 //!     
 //!     // Get the user back
 //!     let get_user = GetUser::new(id as i32);
-//!     let user = get(&client, &get_user).await?;
+//!     let user = get(&client, get_user).await?;
 //!     
 //!     println!("User: {:?}", user);
 //!     Ok(())
@@ -69,7 +81,7 @@ pub mod crud_ops;
 // Re-export tokio-postgres types that might be needed
 pub use tokio_postgres::{types::ToSql, Row, Error, Client};
 
-// Re-export crud operations
+// Re-export crud operations from crud_ops:
 pub use crud_ops::{
     insert, 
     select, 
@@ -117,9 +129,3 @@ pub trait FromRow {
     where
         Self: Sized;
 }
-
-#[cfg(feature = "deadpool-postgres")]
-pub mod transactional_ops;
-
-#[cfg(feature = "deadpool-postgres")]
-pub use transactional_ops as transactional;

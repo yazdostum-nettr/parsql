@@ -11,6 +11,8 @@ Tokio PostgreSQL integration crate for parsql. This package provides asynchronou
 - Conversion of database rows to structs
 - Deadpool connection pool support
 - Automatic protection against SQL Injection attacks
+- Detailed error reporting
+- High-performance asynchronous query execution
 
 ## Security Features
 
@@ -65,11 +67,11 @@ or if you want to use this package directly:
 [dependencies]
 parsql-tokio-postgres = "0.3.2"
 parsql-macros = "0.3.2"
-tokio-postgres = "0.7"
-tokio = { version = "1", features = ["full"] }
+tokio-postgres = "0.7.13"
+tokio = { version = "1.41.1", features = ["full"] }
 
 # If you want to use Deadpool
-deadpool-postgres = "0.10"
+deadpool-postgres = "0.14.1"
 ```
 
 ## Basic Usage
@@ -207,7 +209,7 @@ use parsql::{
 };
 use tokio_postgres::types::ToSql;
 
-#[derive(Insertable)]
+#[derive(Insertable, SqlParams)]
 #[table("users")]
 pub struct InsertUser {
     pub name: String,
@@ -229,8 +231,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     
     let insert_user = InsertUser {
-        name: "Ali".to_string(),
-        email: "ali@parsql.com".to_string(),
+        name: "John".to_string(),
+        email: "john@parsql.com".to_string(),
         state: 1,
     };
     
@@ -249,7 +251,6 @@ use parsql::{
     macros::{UpdateParams, Updateable},
     tokio_postgres::{UpdateParams, update},
 };
-use tokio_postgres::types::ToSql;
 
 #[derive(Updateable, UpdateParams)]
 #[table("users")]
@@ -259,7 +260,6 @@ pub struct UpdateUser {
     pub id: i64,
     pub name: String,
     pub email: String,
-    pub state: i16,
 }
 
 #[tokio::main]
@@ -277,13 +277,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let update_user = UpdateUser {
         id: 1,
-        name: String::from("Ali Updated"),
-        email: String::from("ali.updated@gmail.com"),
-        state: 2,
+        name: "John Smith".to_string(),
+        email: "john.smith@parsql.com".to_string(),
     };
     
-    let result = update(&client, update_user).await?;
-    println!("Number of records updated: {}", result);
+    let update_result = update(&client, update_user).await?;
+    println!("Update successful: {}", update_result);
     
     Ok(())
 }
@@ -297,7 +296,6 @@ use parsql::{
     macros::{Deletable, SqlParams},
     tokio_postgres::{SqlParams, delete},
 };
-use tokio_postgres::types::ToSql;
 
 #[derive(Deletable, SqlParams)]
 #[table("users")]
@@ -320,114 +318,248 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     
     let delete_user = DeleteUser { id: 1 };
-    let result = delete(&client, delete_user).await?;
+    let delete_result = delete(&client, delete_user).await?;
+    println!("Number of records deleted: {}", delete_result);
     
-    println!("Number of records deleted: {}", result);
     Ok(())
 }
 ```
 
-## Using Deadpool
+## Custom Queries
 
-To use parsql with Deadpool connection pool, first you need to enable the "deadpool-postgres" feature in your cargo.toml file. Then, you can use parsql functions on clients obtained from the pool.
-
-```rust
-use deadpool_postgres::{Config, Pool};
-use tokio_postgres::NoTls;
-use parsql::tokio_postgres::{get, insert};
-
-// Get operation with pool connection
-async fn fetch_user(pool: &Pool, user_id: i64) -> Result<GetUser, Box<dyn std::error::Error>> {
-    let client = pool.get().await?;
-    let get_user = GetUser::new(user_id);
-    let result = get(&client, get_user).await?;
-    Ok(result)
-}
-
-// Insert operation with pool connection
-async fn create_user(pool: &Pool, user: InsertUser) -> Result<i64, Box<dyn std::error::Error>> {
-    let client = pool.get().await?;
-    let result = insert(&client, user).await?;
-    Ok(result)
-}
-```
-
-## Advanced Features
-
-### Using Joins
+Sometimes standard CRUD operations might not be sufficient. The `select` and `select_all` functions are provided to easily execute custom queries:
 
 ```rust
-#[derive(Queryable, FromRow, SqlParams, Debug)]
+use parsql::{
+    core::Queryable,
+    macros::{Queryable, SqlParams},
+    tokio_postgres::{SqlParams, select, select_all, FromRow},
+};
+use tokio_postgres::Row;
+
+#[derive(Queryable, SqlParams)]
 #[table("users")]
-#[select("users.id, users.name, posts.title as post_title")]
-#[join("LEFT JOIN posts ON users.id = posts.user_id")]
-#[where_clause("users.id = $")]
-pub struct UserWithPosts {
-    pub id: i64,
-    pub name: String,
-    pub post_title: Option<String>,
-}
-```
-
-### Grouping and Ordering
-
-```rust
-#[derive(Queryable, FromRow, SqlParams, Debug)]
-#[table("users")]
-#[select("state, COUNT(*) as user_count")]
-#[group_by("state")]
-#[order_by("user_count DESC")]
-#[having("COUNT(*) > 5")]
-pub struct UserStats {
-    pub state: i16,
-    pub user_count: i64,
-}
-```
-
-### Custom Select Statements
-
-```rust
-#[derive(Queryable, FromRow, SqlParams, Debug)]
-#[table("users")]
-#[select("id, name, email, CASE WHEN state = 1 THEN 'Active' ELSE 'Inactive' END as status")]
-#[where_clause("id = $")]
-pub struct UserWithStatus {
+#[select("SELECT u.*, p.role FROM users u JOIN profiles p ON u.id = p.user_id")]
+#[where_clause("u.state = $")]
+pub struct UserWithRole {
     pub id: i64,
     pub name: String,
     pub email: String,
-    pub status: String,
+    pub state: i16,
+    pub role: String,
+}
+
+// Manually implementing FromRow trait
+impl FromRow for UserWithRole {
+    fn from_row(row: &Row) -> Result<Self, tokio_postgres::Error> {
+        Ok(Self {
+            id: row.try_get("id")?,
+            name: row.try_get("name")?,
+            email: row.try_get("email")?,
+            state: row.try_get("state")?,
+            role: row.try_get("role")?,
+        })
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let (client, connection) = tokio_postgres::connect(
+        "host=localhost user=postgres password=postgres dbname=test",
+        NoTls,
+    ).await?;
+    
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("Connection error: {}", e);
+        }
+    });
+    
+    let query = UserWithRole {
+        id: 0,
+        name: String::new(),
+        email: String::new(),
+        state: 1, // Active users
+        role: String::new(),
+    };
+    
+    // To get a single result
+    let user = select(&client, query.clone(), |row| UserWithRole::from_row(row)).await?;
+    println!("User: {:?}", user);
+    
+    // To get all results
+    let users = select_all(&client, query, |row| {
+        UserWithRole::from_row(row).unwrap()
+    }).await?;
+    
+    println!("User count: {}", users.len());
+    
+    Ok(())
 }
 ```
 
-## SQL Query Tracing
+## Using with Deadpool Connection Pool
 
-To see the SQL queries being generated, you can set the `PARSQL_TRACE` environment variable:
+The Deadpool connection pool allows you to efficiently manage connections for a large number of concurrent database operations. To use it, enable the `deadpool-postgres` feature:
 
-```sh
+```rust
+use parsql::{
+    tokio_postgres::{get, FromRow, SqlParams},
+    macros::{FromRow, Queryable, SqlParams},
+};
+use deadpool_postgres::{Config, Client, Pool};
+use tokio_postgres::NoTls;
+
+#[derive(Queryable, FromRow, SqlParams, Debug)]
+#[table("users")]
+#[where_clause("state = $")]
+pub struct ActiveUsers {
+    pub id: i64,
+    pub name: String,
+    pub email: String,
+    pub state: i16,
+}
+
+impl ActiveUsers {
+    pub fn new() -> Self {
+        Self {
+            id: 0,
+            name: String::new(),
+            email: String::new(),
+            state: 1, // Active users
+        }
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Deadpool configuration
+    let mut cfg = Config::new();
+    cfg.host = Some("localhost".to_string());
+    cfg.user = Some("postgres".to_string());
+    cfg.password = Some("postgres".to_string());
+    cfg.dbname = Some("test".to_string());
+    
+    // Create connection pool
+    let pool = cfg.create_pool(None, NoTls)?;
+    
+    // Get connection from pool
+    let client: Client = pool.get().await?;
+    
+    // Create query
+    let query = ActiveUsers::new();
+    
+    // Get active users
+    let active_users = get(&client, query).await?;
+    println!("Active user: {:?}", active_users);
+    
+    Ok(())
+}
+```
+
+## Advanced Features and Optimizations
+
+### SQL Tracing
+
+For debugging purposes, you can use the `PARSQL_TRACE` environment variable to track executed SQL queries:
+
+```bash
 PARSQL_TRACE=1 cargo run
 ```
 
-This will print all queries generated for tokio-postgres to the console.
+This will print all executed SQL queries to the console.
 
-## Performance Tips
+### Macro Options
 
-1. **Prepared Statements**: tokio-postgres runs queries as prepared statements, and parsql uses this feature, which helps protect against SQL injection attacks.
+The macros provide various features to offer flexibility in SQL generation:
 
-2. **Connection Pool**: Using deadpool-postgres provides better performance for high-load applications.
-
-3. **Asynchronous Operations**: By running your operations asynchronously with tokio-postgres, you can make your application more efficient.
-
-## Error Handling
-
-Use Rust's `Result` mechanism to catch and handle errors that may occur during tokio-postgres operations:
+#### Queryable (SELECT)
 
 ```rust
-match get(&client, get_user).await {
-    Ok(user) => println!("User found: {:?}", user),
-    Err(e) => eprintln!("Error occurred: {}", e),
+#[derive(Queryable, FromRow, SqlParams)]
+#[table("users")]
+#[select("SELECT * FROM users")] // Optional custom SQL
+#[where_clause("id = $ AND state = $")] // Conditions
+#[order_by("id DESC")] // Sorting
+#[limit(10)] // Limit
+#[offset(5)] // Offset
+struct UserQuery {
+    // ...
 }
 ```
 
-## Complete Example Project
+#### Insertable
 
-For a complete example project, see the [examples/tokio-postgres](../examples/tokio-postgres) directory in the main parsql repository. 
+```rust
+#[derive(Insertable, SqlParams)]
+#[table("users")]
+#[returning("id")] // For INSERT...RETURNING
+struct NewUser {
+    // ...
+}
+```
+
+#### Updateable
+
+```rust
+#[derive(Updateable, UpdateParams)]
+#[table("users")]
+#[update("name, email")] // Only update specific fields
+#[where_clause("id = $")]
+struct UpdateUser {
+    // ...
+}
+```
+
+## Performance Tips
+
+* Reuse queries with the same SQL structure to take advantage of the query plan cache
+* Use connection pools for large numbers of queries
+* Use pagination (limit and offset) instead of `get_all` for large datasets
+* Apply filters at the database level, not in your application
+
+## Error Catching and Handling
+
+```rust
+async fn handle_database() -> Result<(), Box<dyn std::error::Error>> {
+    let (client, connection) = tokio_postgres::connect(
+        "host=localhost user=postgres password=postgres dbname=test",
+        NoTls,
+    ).await?;
+    
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("Connection error: {}", e);
+        }
+    });
+    
+    let result = match get(&client, user_query).await {
+        Ok(user) => {
+            println!("User found: {:?}", user);
+            // Operation successful
+            Ok(())
+        },
+        Err(e) => match e.code() {
+            // Handle specific PostgreSQL error codes
+            Some(code) if code == &tokio_postgres::error::SqlState::UNIQUE_VIOLATION => {
+                println!("Uniqueness violation: {}", e);
+                Err(e.into())
+            },
+            Some(code) if code == &tokio_postgres::error::SqlState::FOREIGN_KEY_VIOLATION => {
+                println!("Foreign key violation: {}", e);
+                Err(e.into())
+            },
+            _ => {
+                println!("General database error: {}", e);
+                Err(e.into())
+            }
+        },
+    };
+    
+    result
+}
+```
+
+## Licensing
+
+This library is licensed under the MIT or Apache-2.0 license. 

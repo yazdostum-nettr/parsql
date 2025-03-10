@@ -33,6 +33,7 @@ use crate::{SqlQuery, SqlParams, UpdateParams, FromRow};
 /// ```rust,no_run
 /// use tokio_postgres::{NoTls, Error};
 /// use parsql::tokio_postgres::{insert};
+/// use parsql::macros::{Insertable, SqlParams};
 /// 
 /// #[derive(Insertable, SqlParams)]
 /// #[table("users")]
@@ -99,33 +100,33 @@ pub async fn insert<T: SqlQuery + SqlParams>(
 /// #[update("field1, field2")]          // Fields to update (optional)
 /// #[where_clause("id = $")]            // Update condition
 /// pub struct MyEntity {
-///     pub id: i32,                     // Fields used in the condition
-///     pub field1: String,              // Fields to be updated
-///     pub field2: i32,                 // Fields to be updated
+///     pub id: i32,                    // Used in where_clause
+///     pub field1: String,             // Fields to update
+///     pub field2: i32,
 ///     // ...
 /// }
 /// ```
 /// 
 /// - `Updateable`: Automatically generates SQL UPDATE statements
-/// - `UpdateParams`: Automatically generates update parameters
+/// - `UpdateParams`: Automatically generates SQL parameters for UPDATE operations
 /// - `#[table("table_name")]`: Specifies the table name for the update
-/// - `#[update("field1, field2")]`: Specifies which fields should be updated (if omitted, all fields will be updated)
-/// - `#[where_clause("id = $")]`: Specifies the update condition (`$` will be replaced with parameter value)
+/// - `#[update("field1, field2")]`: Specifies which fields to update (optional)
+/// - `#[where_clause("id = $")]`: Specifies the condition for the update
 /// 
 /// ## Example Usage
 /// ```rust,no_run
 /// use tokio_postgres::{NoTls, Error};
 /// use parsql::tokio_postgres::{update};
+/// use parsql::macros::{Updateable, UpdateParams};
 /// 
 /// #[derive(Updateable, UpdateParams)]
 /// #[table("users")]
 /// #[update("name, email")]
 /// #[where_clause("id = $")]
 /// pub struct UpdateUser {
-///     pub id: i32,
+///     pub id: i64,
 ///     pub name: String,
 ///     pub email: String,
-///     pub state: i16,  // This field won't be updated as it's not specified in the update attribute
 /// }
 ///
 /// #[tokio::main]
@@ -143,13 +144,12 @@ pub async fn insert<T: SqlQuery + SqlParams>(
 ///
 ///     let update_user = UpdateUser {
 ///         id: 1,
-///         name: String::from("John"),
-///         email: String::from("john@example.com"),
-///         state: 2,
+///         name: "John Smith".to_string(),
+///         email: "john.smith@example.com".to_string(),
 ///     };
 ///
 ///     let update_result = update(&client, update_user).await?;
-///     println!("Update result: {:?}", update_result);
+///     println!("Update successful: {}", update_result);
 ///     Ok(())
 /// }
 /// ```
@@ -163,10 +163,8 @@ pub async fn update<T: SqlQuery + UpdateParams>(
     }
 
     let params = entity.params();
-    match client.execute(&sql, &params).await {
-        Ok(_) => Ok(true),
-        Err(e) => Err(e),
-    }
+    let result = client.execute(&sql, &params).await?;
+    Ok(result > 0)
 }
 
 /// # delete
@@ -175,7 +173,7 @@ pub async fn update<T: SqlQuery + UpdateParams>(
 /// 
 /// ## Parameters
 /// - `client`: Database connection object
-/// - `entity`: Data object containing the deletion information (must implement SqlQuery and SqlParams traits)
+/// - `entity`: Data object containing delete conditions (must implement SqlQuery and SqlParams traits)
 /// 
 /// ## Return Value
 /// - `Result<u64, Error>`: On success, returns the number of deleted records; on failure, returns Error
@@ -185,31 +183,32 @@ pub async fn update<T: SqlQuery + UpdateParams>(
 /// 
 /// ```rust,no_run
 /// #[derive(Deletable, SqlParams)]   // Required macros
-/// #[table("table_name")]             // Table name to delete from
-/// #[where_clause("id = $")]          // Delete condition
+/// #[table("table_name")]            // Table name to delete from
+/// #[where_clause("id = $")]         // Delete condition
 /// pub struct MyEntity {
-///     pub id: i32,                   // Fields used in the condition
-///     // Other fields can be added, but typically only condition fields are necessary
+///     pub id: i32,                  // Used in where_clause
+///     // ...
 /// }
 /// ```
 /// 
 /// - `Deletable`: Automatically generates SQL DELETE statements
 /// - `SqlParams`: Automatically generates SQL parameters
 /// - `#[table("table_name")]`: Specifies the table name for the deletion
-/// - `#[where_clause("id = $")]`: Specifies the delete condition (`$` will be replaced with parameter value)
+/// - `#[where_clause("id = $")]`: Specifies the condition for the deletion
 /// 
 /// ## Example Usage
 /// ```rust,no_run
 /// use tokio_postgres::{NoTls, Error};
 /// use parsql::tokio_postgres::{delete};
+/// use parsql::macros::{Deletable, SqlParams};
 /// 
 /// #[derive(Deletable, SqlParams)]
 /// #[table("users")]
 /// #[where_clause("id = $")]
 /// pub struct DeleteUser {
-///     pub id: i32,
+///     pub id: i64,
 /// }
-/// 
+///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Error> {
 ///     let (client, connection) = tokio_postgres::connect(
@@ -223,10 +222,10 @@ pub async fn update<T: SqlQuery + UpdateParams>(
 ///         }
 ///     });
 ///
-///     let delete_user = DeleteUser { id: 6 };
+///     let delete_user = DeleteUser { id: 1 };
+///
 ///     let delete_result = delete(&client, delete_user).await?;
-///     
-///     println!("Delete result: {:?}", delete_result);
+///     println!("Number of records deleted: {}", delete_result);
 ///     Ok(())
 /// }
 /// ```
@@ -240,78 +239,64 @@ pub async fn delete<T: SqlQuery + SqlParams>(
     }
 
     let params = entity.params();
-    match client.execute(&sql, &params).await {
-        Ok(rows_affected) => Ok(rows_affected),
-        Err(e) => Err(e),
-    }
+    client.execute(&sql, &params).await
 }
 
 /// # get
 /// 
-/// Retrieves a single record from the database.
+/// Retrieves a single record from the database and converts it to a struct.
 /// 
 /// ## Parameters
 /// - `client`: Database connection object
-/// - `params`: Query parameter object (must implement SqlQuery, FromRow, and SqlParams traits)
+/// - `params`: Data object containing query parameters (must implement SqlQuery, FromRow, and SqlParams traits)
 /// 
 /// ## Return Value
-/// - `Result<T, Error>`: On success, returns the found record; on failure, returns Error
+/// - `Result<T, Error>`: On success, returns the retrieved record as a struct; on failure, returns Error
 /// 
 /// ## Struct Definition
 /// Structs used with this function should be annotated with the following derive macros:
 /// 
 /// ```rust,no_run
-/// #[derive(Queryable, SqlParams, FromRow, Debug)]  // Required macros
-/// #[table("table_name")]                           // Table name to query
-/// #[where_clause("id = $")]                        // Query condition
+/// #[derive(Queryable, FromRow, SqlParams)]  // Required macros
+/// #[table("table_name")]                   // Table name to query
+/// #[where_clause("id = $")]                // Query condition
 /// pub struct MyEntity {
-///     pub id: i32,                                 // Field used in the query condition
-///     pub field1: String,                          // Fields to be populated from the result set
+///     pub id: i32,                        // Used in where_clause
+///     pub field1: String,                 // Fields to retrieve
 ///     pub field2: i32,
 ///     // ...
-/// }
-/// 
-/// // A factory method is also useful
-/// impl MyEntity {
-///     pub fn new(id: i32) -> Self {
-///         Self {
-///             id,
-///             field1: String::default(),
-///             field2: 0,
-///             // ...
-///         }
-///     }
 /// }
 /// ```
 /// 
 /// - `Queryable`: Automatically generates SQL SELECT statements
+/// - `FromRow`: Automatically converts database rows to structs
 /// - `SqlParams`: Automatically generates SQL parameters
-/// - `FromRow`: Enables conversion from database row to struct object
 /// - `#[table("table_name")]`: Specifies the table name for the query
-/// - `#[where_clause("id = $")]`: Specifies the query condition (`$` will be replaced with parameter value)
+/// - `#[where_clause("id = $")]`: Specifies the condition for the query
 /// 
 /// ## Example Usage
 /// ```rust,no_run
 /// use tokio_postgres::{NoTls, Error};
 /// use parsql::tokio_postgres::{get};
+/// use parsql::macros::{Queryable, FromRow, SqlParams};
 /// 
-/// #[derive(Queryable, SqlParams, FromRow, Debug)]
+/// #[derive(Queryable, FromRow, SqlParams, Debug)]
 /// #[table("users")]
 /// #[where_clause("id = $")]
 /// pub struct GetUser {
-///     pub id: i32,
+///     pub id: i64,
 ///     pub name: String,
 ///     pub email: String,
 ///     pub state: i16,
 /// }
-/// 
+///
 /// impl GetUser {
-///     pub fn new(id: i32) -> Self {
+///     pub fn new(id: i64) -> Self {
 ///         Self {
 ///             id,
-///             name: String::default(),
-///             email: String::default(),
-///             state: 0,
+///             name: Default::default(),
+///             email: Default::default(),
+///             state: Default::default(),
 ///         }
 ///     }
 /// }
@@ -330,9 +315,8 @@ pub async fn delete<T: SqlQuery + SqlParams>(
 ///     });
 ///
 ///     let get_user = GetUser::new(1);
-///     let get_result = get(&client, &get_user).await?;
-///     
-///     println!("Get result: {:?}", get_result);
+///     let user = get(&client, get_user).await?;
+///     println!("User: {:?}", user);
 ///     Ok(())
 /// }
 /// ```

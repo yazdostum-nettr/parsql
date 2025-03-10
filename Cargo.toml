@@ -1,9 +1,10 @@
 [workspace]
 resolver = "2"
-members = [
-    "examples/postgres",
-    "examples/sqlite",
+members = [ "examples/postgres",
+    "examples/sqlite", 
+    "examples/tokio-deadpool-postgres",
     "examples/tokio-postgres",
+    "parsql-deadpool-postgres",
     "parsql-macros",
     "parsql-postgres",
     "parsql-sqlite",
@@ -41,7 +42,7 @@ tokio-postgres = [
     "parsql-macros/tokio-postgres",
 ]
 deadpool-postgres = [
-    "parsql-tokio-postgres/deadpool-postgres",
+    "dep:parsql-deadpool-postgres",
     "parsql-macros/deadpool-postgres",
 ]
 
@@ -50,12 +51,14 @@ parsql-macros = { path = "parsql-macros", version = "0.3.2" }
 parsql-sqlite = { path = "parsql-sqlite", version = "0.3.2" }
 parsql-postgres = { path = "parsql-postgres", version = "0.3.2" }
 parsql-tokio-postgres = { path = "parsql-tokio-postgres", version = "0.3.2" }
+parsql-deadpool-postgres = { path = "parsql-deadpool-postgres" }
 
 [dependencies]
 parsql-macros = { workspace = true, version = "0.3.2" }
 parsql-sqlite = { workspace = true, version = "0.3.2", optional = true }
 parsql-postgres = { workspace = true, version = "0.3.2", optional = true }
 parsql-tokio-postgres = { workspace = true, version = "0.3.2", optional = true }
+parsql-deadpool-postgres = { workspace = true, optional = true }
 
 [workspace.lints.clippy]
 cast_possible_truncation = 'deny'
