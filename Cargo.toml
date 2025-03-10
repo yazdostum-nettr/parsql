@@ -46,16 +46,16 @@ deadpool-postgres = [
 ]
 
 [workspace.dependencies]
-parsql-macros = { path = "parsql-macros", workspace = true, version = "0.3.1" }
-parsql-sqlite = { path = "parsql-sqlite", workspace = true, version = "0.3.1" }
-parsql-postgres = { path = "parsql-postgres", workspace = true, version = "0.3.1" }
-parsql-tokio-postgres = { path = "parsql-tokio-postgres", workspace = true, version = "0.3.1" }
+parsql-macros = { path = "parsql-macros", version = "0.3.2" }
+parsql-sqlite = { path = "parsql-sqlite", version = "0.3.2" }
+parsql-postgres = { path = "parsql-postgres", version = "0.3.2" }
+parsql-tokio-postgres = { path = "parsql-tokio-postgres", version = "0.3.2" }
 
 [dependencies]
-parsql-macros = { version = "0.3.1"}
-parsql-sqlite = { workspace = true, optional = true, version = "0.3.1"   }
-parsql-postgres = { workspace = true, optional = true, version = "0.3.1" }
-parsql-tokio-postgres = { workspace = true, optional = true, version = "0.3.1" }
+parsql-macros = { workspace = true, version = "0.3.2" }
+parsql-sqlite = { workspace = true, version = "0.3.2", optional = true }
+parsql-postgres = { workspace = true, version = "0.3.2", optional = true }
+parsql-tokio-postgres = { workspace = true, version = "0.3.2", optional = true }
 
 [workspace.lints.clippy]
 cast_possible_truncation = 'deny'
