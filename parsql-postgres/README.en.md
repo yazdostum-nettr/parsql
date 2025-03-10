@@ -50,15 +50,15 @@ Add to your Cargo.toml file as follows:
 
 ```toml
 [dependencies]
-parsql = { version = "0.3.0", features = ["postgres"] }
+parsql = { version = "0.3.2", features = ["postgres"] }
 ```
 
 or if you want to use this package directly:
 
 ```toml
 [dependencies]
-parsql-postgres = "0.3.0"
-parsql-macros = "0.3.0"
+parsql-postgres = "0.3.2"
+parsql-macros = "0.3.2"
 postgres = "0.19"
 ```
 
