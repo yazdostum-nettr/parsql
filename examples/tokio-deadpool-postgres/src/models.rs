@@ -1,11 +1,11 @@
 use chrono::{DateTime, Utc};
-use parsql_deadpool_postgres::macros::{Deletable, Insertable, Queryable, Updateable};
-use parsql_deadpool_postgres::{FromRow as FromRowTrait, SqlParams as SqlParamsTrait, SqlQuery, UpdateParams as UpdateParamsTrait};
+use parsql_deadpool_postgres::macros::{Deletable, Insertable, Queryable, Updateable, FromRow as DeriveFromRow, SqlParams as DeriveSqlParams, UpdateParams as DeriveUpdateParams};
+use parsql_deadpool_postgres::{SqlQuery, SqlParams, UpdateParams, FromRow};
 use serde::{Deserialize, Serialize};
-use tokio_postgres::types::ToSql;
+use tokio_postgres::{types::ToSql, Row, Error};
 
 // Kullanıcı ekleme modeli
-#[derive(Debug, Clone, Serialize, Deserialize, Insertable)]
+#[derive(Debug, Clone, Serialize, Deserialize, Insertable, DeriveSqlParams)]
 #[table("users")]
 pub struct UserInsert {
     pub name: String,
@@ -15,7 +15,7 @@ pub struct UserInsert {
 }
 
 // Kullanıcı güncelleme modeli
-#[derive(Debug, Clone, Serialize, Deserialize, Updateable)]
+#[derive(Debug, Clone, Serialize, Deserialize, Updateable, DeriveUpdateParams)]
 #[table("users")]
 #[update("name, email, active, updated_at")]
 #[where_clause("id = $")]
@@ -28,7 +28,7 @@ pub struct UserUpdate {
 }
 
 // Kullanıcı silme modeli
-#[derive(Debug, Clone, Serialize, Deserialize, Deletable)]
+#[derive(Debug, Clone, Serialize, Deserialize, Deletable, DeriveSqlParams)]
 #[table("users")]
 #[where_clause("id = $")]
 pub struct UserDelete {
@@ -36,7 +36,7 @@ pub struct UserDelete {
 }
 
 // ID'ye göre kullanıcı getirme modeli
-#[derive(Debug, Clone, Serialize, Deserialize, Queryable)]
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable, DeriveFromRow, DeriveSqlParams)]
 #[table("users")]
 #[select("id, name, email, active, created_at, updated_at")]
 #[where_clause("id = $")]
@@ -50,7 +50,7 @@ pub struct UserById {
 }
 
 // Aktiflik durumuna göre kullanıcıları getirme modeli
-#[derive(Debug, Clone, Serialize, Deserialize, Queryable)]
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable, DeriveFromRow, DeriveSqlParams)]
 #[table("users")]
 #[select("id, name, email, active, created_at, updated_at")]
 #[where_clause("active = $")]
@@ -120,62 +120,5 @@ impl UsersByActive {
             created_at: Utc::now(),
             updated_at: None,
         }
-    }
-}
-
-// Trait implementasyonları
-impl SqlParamsTrait for UserInsert {
-    fn params(&self) -> Vec<&(dyn ToSql + Sync)> {
-        vec![&self.name, &self.email, &self.active, &self.created_at]
-    }
-}
-
-impl UpdateParamsTrait for UserUpdate {
-    fn params(&self) -> Vec<&(dyn ToSql + Sync)> {
-        vec![&self.name, &self.email, &self.active, &self.updated_at, &self.id]
-    }
-}
-
-impl SqlParamsTrait for UserDelete {
-    fn params(&self) -> Vec<&(dyn ToSql + Sync)> {
-        vec![&self.id]
-    }
-}
-
-impl SqlParamsTrait for UserById {
-    fn params(&self) -> Vec<&(dyn ToSql + Sync)> {
-        vec![&self.id]
-    }
-}
-
-impl FromRowTrait for UserById {
-    fn from_row(row: &tokio_postgres::Row) -> Result<Self, tokio_postgres::Error> {
-        Ok(Self {
-            id: row.get("id"),
-            name: row.get("name"),
-            email: row.get("email"),
-            active: row.get("active"),
-            created_at: row.get("created_at"),
-            updated_at: row.get("updated_at"),
-        })
-    }
-}
-
-impl SqlParamsTrait for UsersByActive {
-    fn params(&self) -> Vec<&(dyn ToSql + Sync)> {
-        vec![&self.active]
-    }
-}
-
-impl FromRowTrait for UsersByActive {
-    fn from_row(row: &tokio_postgres::Row) -> Result<Self, tokio_postgres::Error> {
-        Ok(Self {
-            id: row.get("id"),
-            name: row.get("name"),
-            email: row.get("email"),
-            active: row.get("active"),
-            created_at: row.get("created_at"),
-            updated_at: row.get("updated_at"),
-        })
     }
 } 

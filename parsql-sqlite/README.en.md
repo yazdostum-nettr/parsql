@@ -10,6 +10,7 @@ SQLite integration crate for parsql. This package provides synchronous APIs that
 - Generic CRUD operations (get, insert, update)
 - Conversion of database rows to structs
 - Automatic protection against SQL Injection attacks
+- Transaction support
 
 ## Security Features
 
@@ -61,31 +62,235 @@ parsql-sqlite = "0.3.2"
 parsql-macros = "0.3.2"
 ```
 
-## Basic Usage
+## Usage
 
-This package uses **synchronous operations** when working with SQLite databases. This means it doesn't require async/await usage.
+parsql-sqlite offers two different approaches for working with SQLite databases:
+
+1. Function-based approach (`get`, `insert`, `update`, etc.)
+2. Extension method approach (`conn.get()`, `conn.insert()`, etc.) - `CrudOps` trait
 
 ### Establishing a Connection
 
 ```rust
-use rusqlite::Connection;
+use rusqlite::{Connection, Result};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create SQLite connection
-    let conn = Connection::open("database.db")?;
-    
+fn main() -> Result<()> {
+    // Create SQLite database connection
+    let conn = Connection::open("test.db")?;
+
     // Create example table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
-            email TEXT NOT NULL,
-            state INTEGER NOT NULL
+            email TEXT NOT NULL
         )",
         [],
     )?;
     
     // ...
+    
+    Ok(())
+}
+```
+
+### Function-Based Approach
+
+```rust
+use rusqlite::{Connection, Result};
+use parsql::sqlite::{get, insert};
+use parsql::macros::{Insertable, SqlParams, Queryable, FromRow};
+
+#[derive(Insertable, SqlParams)]
+#[table("users")]
+struct InsertUser {
+    name: String,
+    email: String,
+}
+
+#[derive(Queryable, FromRow, SqlParams)]
+#[table("users")]
+#[where_clause("id = ?")]
+struct GetUser {
+    id: i64,
+    name: String,
+    email: String,
+}
+
+fn main() -> Result<()> {
+    let conn = Connection::open("test.db")?;
+    
+    // Add a user with function approach
+    let insert_user = InsertUser {
+        name: "John".to_string(),
+        email: "john@example.com".to_string(),
+    };
+    let rows_affected = insert(&conn, insert_user)?;
+    
+    // Get a user with function approach
+    let get_user = GetUser {
+        id: 1,
+        name: String::new(),
+        email: String::new(),
+    };
+    let user = get(&conn, &get_user)?;
+    
+    println!("User: {:?}", user);
+    Ok(())
+}
+```
+
+### Extension Method Approach (CrudOps Trait)
+
+```rust
+use rusqlite::{Connection, Result};
+use parsql::sqlite::CrudOps;  // Import the CrudOps trait
+use parsql::macros::{Insertable, SqlParams, Queryable, FromRow};
+
+#[derive(Insertable, SqlParams)]
+#[table("users")]
+struct InsertUser {
+    name: String,
+    email: String,
+}
+
+#[derive(Queryable, FromRow, SqlParams)]
+#[table("users")]
+#[where_clause("id = ?")]
+struct GetUser {
+    id: i64,
+    name: String,
+    email: String,
+}
+
+fn main() -> Result<()> {
+    let conn = Connection::open("test.db")?;
+    
+    // Add a user with extension method approach
+    let insert_user = InsertUser {
+        name: "John".to_string(),
+        email: "john@example.com".to_string(),
+    };
+    let rows_affected = conn.insert(insert_user)?;
+    
+    // Get a user with extension method approach
+    let get_user = GetUser {
+        id: 1,
+        name: String::new(),
+        email: String::new(),
+    };
+    let user = conn.get(&get_user)?;
+    
+    println!("User: {:?}", user);
+    Ok(())
+}
+```
+
+## Transaction Operations
+
+parsql-sqlite offers two different approaches for transaction operations:
+
+1. Using the `CrudOps` trait directly on the `Transaction` object
+2. Using helper functions from the `transactional` module
+
+### Transaction Operations with CrudOps Trait
+
+```rust
+use rusqlite::{Connection, Result};
+use parsql::sqlite::CrudOps;
+use parsql::sqlite::transactional;
+use parsql::macros::{Insertable, SqlParams, Queryable, FromRow};
+
+#[derive(Insertable, SqlParams)]
+#[table("users")]
+struct InsertUser {
+    name: String,
+    email: String,
+}
+
+#[derive(Queryable, FromRow, SqlParams)]
+#[table("users")]
+#[where_clause("id = ?")]
+struct GetUser {
+    id: i64,
+    name: String,
+    email: String,
+}
+
+fn main() -> Result<()> {
+    let conn = Connection::open("test.db")?;
+    
+    // Begin a transaction
+    let tx = transactional::begin(&conn)?;
+    
+    // Insert a user within the transaction
+    let user = InsertUser {
+        name: "John".to_string(),
+        email: "john@example.com".to_string(),
+    };
+    let rows_affected = tx.insert(user)?;
+    
+    // Get a user within the transaction
+    let param = GetUser {
+        id: 1,
+        name: String::new(),
+        email: String::new(),
+    };
+    let user = tx.get(&param)?;
+    
+    // Commit the transaction
+    tx.commit()?;
+    
+    println!("User: {:?}", user);
+    Ok(())
+}
+```
+
+### Transaction Operations with Transactional Module
+
+```rust
+use rusqlite::{Connection, Result};
+use parsql::sqlite::transactional;
+use parsql::macros::{Insertable, SqlParams, Updateable, UpdateParams};
+
+#[derive(Insertable, SqlParams)]
+#[table("users")]
+struct InsertUser {
+    name: String,
+    email: String,
+}
+
+#[derive(Updateable, UpdateParams)]
+#[table("users")]
+#[update("email")]
+#[where_clause("id = ?")]
+struct UpdateUser {
+    id: i64,
+    email: String,
+}
+
+fn main() -> Result<()> {
+    let conn = Connection::open("test.db")?;
+    
+    // Begin a transaction
+    let tx = transactional::begin(&conn)?;
+    
+    // Insert a user within the transaction
+    let insert_user = InsertUser {
+        name: "John".to_string(),
+        email: "john@example.com".to_string(),
+    };
+    let (tx, rows_affected) = transactional::tx_insert(tx, insert_user)?;
+    
+    // Update a user within the same transaction
+    let update_user = UpdateUser {
+        id: 1,
+        email: "john.updated@example.com".to_string(),
+    };
+    let (tx, rows_affected) = transactional::tx_update(tx, update_user)?;
+    
+    // Commit the transaction - both operations succeed or fail together
+    tx.commit()?;
     
     Ok(())
 }

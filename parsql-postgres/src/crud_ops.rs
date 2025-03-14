@@ -1,6 +1,186 @@
 use postgres::{types::ToSql, Client, Error, Row};
 use crate::{SqlQuery, SqlParams, UpdateParams, FromRow};
 
+/// CrudOps trait defines the CRUD (Create, Read, Update, Delete) operations
+/// that can be performed on a PostgreSQL database.
+///
+/// This trait is implemented for the `postgres::Client` struct, allowing
+/// CRUD operations to be called as extension methods on a client.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use postgres::{Client, NoTls, Error};
+/// use parsql::postgres::CrudOps;
+/// use parsql::macros::{Insertable, SqlParams, Queryable, FromRow};
+///
+/// #[derive(Insertable, SqlParams)]
+/// #[table("users")]
+/// struct InsertUser {
+///     name: String,
+///     email: String,
+/// }
+///
+/// #[derive(Queryable, FromRow, SqlParams)]
+/// #[table("users")]
+/// #[where_clause("id = $1")]
+/// struct GetUser {
+///     id: i32,
+///     name: String,
+///     email: String,
+/// }
+///
+/// fn main() -> Result<(), Error> {
+///     let mut client = Client::connect("host=localhost user=postgres", NoTls)?;
+///     
+///     // Extension method for insert
+///     let insert_user = InsertUser {
+///         name: "John".to_string(),
+///         email: "john@example.com".to_string(),
+///     };
+///     let rows_affected = client.insert(insert_user)?;
+///     
+///     // Extension method for get
+///     let get_user = GetUser {
+///         id: 1,
+///         name: String::new(),
+///         email: String::new(),
+///     };
+///     let user = client.get(&get_user)?;
+///     
+///     println!("User: {:?}", user);
+///     Ok(())
+/// }
+/// ```
+pub trait CrudOps {
+    /// Inserts a new record into the PostgreSQL database.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object to be inserted (must implement SqlQuery and SqlParams traits)
+    /// 
+    /// # Returns
+    /// * `Result<u64, Error>` - On success, returns the number of inserted records; on failure, returns Error
+    fn insert<T: SqlQuery + SqlParams>(&mut self, entity: T) -> Result<u64, Error>;
+
+    /// Updates records in the PostgreSQL database.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object containing the update information (must implement SqlQuery and UpdateParams traits)
+    /// 
+    /// # Returns
+    /// * `Result<u64, Error>` - On success, returns the number of updated records; on failure, returns Error
+    fn update<T: SqlQuery + UpdateParams>(&mut self, entity: T) -> Result<u64, Error>;
+
+    /// Deletes records from the PostgreSQL database.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object containing delete conditions (must implement SqlQuery and SqlParams traits)
+    /// 
+    /// # Returns
+    /// * `Result<u64, Error>` - On success, returns the number of deleted records; on failure, returns Error
+    fn delete<T: SqlQuery + SqlParams>(&mut self, entity: T) -> Result<u64, Error>;
+
+    /// Retrieves a single record from the PostgreSQL database.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object containing query parameters (must implement SqlQuery, FromRow, and SqlParams traits)
+    /// 
+    /// # Returns
+    /// * `Result<T, Error>` - On success, returns the retrieved record; on failure, returns Error
+    fn get<T: SqlQuery + FromRow + SqlParams>(&mut self, entity: &T) -> Result<T, Error>;
+
+    /// Retrieves multiple records from the PostgreSQL database.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object containing query parameters (must implement SqlQuery, FromRow, and SqlParams traits)
+    /// 
+    /// # Returns
+    /// * `Result<Vec<T>, Error>` - On success, returns a vector of records; on failure, returns Error
+    fn get_all<T: SqlQuery + FromRow + SqlParams>(&mut self, entity: &T) -> Result<Vec<T>, Error>;
+
+    /// Executes a custom query and transforms the result using the provided function.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object containing query parameters (must implement SqlQuery and SqlParams traits)
+    /// * `to_model` - Function to transform the database row into the desired type
+    /// 
+    /// # Returns
+    /// * `Result<R, Error>` - On success, returns the transformed result; on failure, returns Error
+    fn select<T, F, R>(&mut self, entity: &T, to_model: F) -> Result<R, Error>
+    where
+        T: SqlQuery + SqlParams,
+        F: FnOnce(&Row) -> Result<R, Error>;
+
+    /// Executes a custom query and transforms all results using the provided function.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object containing query parameters (must implement SqlQuery and SqlParams traits)
+    /// * `to_model` - Function to transform database rows into the desired type
+    /// 
+    /// # Returns
+    /// * `Result<Vec<R>, Error>` - On success, returns a vector of transformed results; on failure, returns Error
+    fn select_all<T, F, R>(&mut self, entity: &T, to_model: F) -> Result<Vec<R>, Error>
+    where
+        T: SqlQuery + SqlParams,
+        F: FnMut(&Row) -> Result<R, Error>;
+}
+
+// CrudOps trait implementasyonu postgres::Client için
+impl CrudOps for Client {
+    fn insert<T: SqlQuery + SqlParams>(&mut self, entity: T) -> Result<u64, Error> {
+        insert(self, entity)
+    }
+
+    fn update<T: SqlQuery + UpdateParams>(&mut self, entity: T) -> Result<u64, Error> {
+        update(self, entity)
+    }
+
+    fn delete<T: SqlQuery + SqlParams>(&mut self, entity: T) -> Result<u64, Error> {
+        delete(self, entity)
+    }
+
+    fn get<T: SqlQuery + FromRow + SqlParams>(&mut self, entity: &T) -> Result<T, Error> {
+        get(self, entity)
+    }
+
+    fn get_all<T: SqlQuery + FromRow + SqlParams>(&mut self, entity: &T) -> Result<Vec<T>, Error> {
+        get_all(self, entity)
+    }
+
+    fn select<T, F, R>(&mut self, entity: &T, to_model: F) -> Result<R, Error>
+    where
+        T: SqlQuery + SqlParams,
+        F: FnOnce(&Row) -> Result<R, Error>,
+    {
+        let sql = T::query();
+        
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-POSTGRES] Execute SQL: {}", sql);
+        }
+
+        let params = entity.params();
+        let row = self.query_one(&sql, &params)?;
+        to_model(&row)
+    }
+
+    fn select_all<T, F, R>(&mut self, entity: &T, to_model: F) -> Result<Vec<R>, Error>
+    where
+        T: SqlQuery + SqlParams,
+        F: FnMut(&Row) -> Result<R, Error>,
+    {
+        let sql = T::query();
+        
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-POSTGRES] Execute SQL: {}", sql);
+        }
+
+        let params = entity.params();
+        let rows = self.query(&sql, &params)?;
+        
+        rows.iter().map(to_model).collect()
+    }
+}
+
 /// # insert
 /// 
 /// Inserts a new record into the database.

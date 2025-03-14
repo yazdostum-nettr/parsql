@@ -90,3 +90,13 @@ impl UserPostStats {
         }
     }
 }
+
+#[derive(Debug, Queryable, SqlParams, FromRow)]
+#[table("users")]
+#[where_clause("state = $1")]
+#[order_by("id ASC")]
+#[limit(10)]   // Her sayfada 10 kayıt
+#[offset(30)]  // 4. sayfa (30. kayıttan başla)
+pub struct GetUsersPage4 {
+    // ...alanlar
+}
