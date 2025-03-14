@@ -9,6 +9,14 @@ A procedural macro crate for Parsql. This package contains derive macros for SQL
 - Support for multiple database systems (PostgreSQL, SQLite)
 - Type-safe database operations
 - Automatic protection against SQL Injection attacks
+- `Queryable` derivation attribute supports table name, where statement, select statement, group by, having, order by, limit and offset statements.
+- **New:** Complete pagination support: efficiently paginate results using `limit` and `offset` attributes.
+- `Insertable` derivation attribute generates table-specific INSERT statements.
+- `Updateable` derivation attribute generates table-specific UPDATE statements.
+- `Deletable` derivation attribute generates table-specific DELETE statements.
+- `SqlParams` derivation attribute allows the structure to be used for SQL parameters.
+- `UpdateParams` derivation attribute allows the structure to be used for UPDATE statements.
+- `FromRow` derivation attribute allows database rows to be converted to the structure.
 
 ## Macros
 
@@ -132,6 +140,48 @@ pub struct DeleteUser {
 - `#[group_by("field1")]` - Specifies GROUP BY statement
 - `#[order_by("field1 DESC")]` - Specifies ORDER BY statement
 - `#[having("COUNT(*) > 5")]` - Specifies HAVING statement
+- `#[limit(10)]` - Specifies the maximum number of records to return in the query
+- `#[offset(20)]` - Specifies how many records to skip before starting to return records
+
+## Pagination Support
+
+Since version 0.3.2, parsql-macros provides robust support for pagination operations:
+
+- `#[limit(N)]` - Determines how many records to display per page
+- `#[offset(N)]` - Determines which record to start from
+- Full support for both SQLite and PostgreSQL databases
+
+### Pagination Example
+
+```rust
+// Query structure for the first page
+#[derive(Debug, Queryable, SqlParams, FromRow)]
+#[table("users")]
+#[where_clause("state >= $")]
+#[order_by("id ASC")]
+#[limit(10)]       // 10 records per page
+#[offset(0)]       // First page (starting from index 0)
+pub struct PageOne {
+    pub id: i32,
+    pub name: String,
+    pub email: String,
+    pub state: i16,
+}
+
+// Query structure for the second page
+#[derive(Debug, Queryable, SqlParams, FromRow)]
+#[table("users")]
+#[where_clause("state >= $")]
+#[order_by("id ASC")]
+#[limit(10)]       // 10 records per page
+#[offset(10)]      // Second page (start from record 10)
+pub struct PageTwo {
+    pub id: i32,
+    pub name: String,
+    pub email: String,
+    pub state: i16,
+}
+```
 
 ## Parameter Marking
 
@@ -143,3 +193,17 @@ For each database, appropriate parameter marking is done automatically:
 ## License
 
 [MIT license](../LICENSE) 
+
+### Queryable
+
+This derivation macro adds the ability to create SELECT queries to a structure.
+
+Supported attributes:
+- `table`: SQL table name
+- `where_clause`: SQL WHERE statement
+- `select`: SQL SELECT statement 
+- `group_by`: SQL GROUP BY statement
+- `having`: SQL HAVING statement
+- `order_by`: SQL ORDER BY statement
+- `limit`: SQL LIMIT statement
+- `offset`: SQL OFFSET statement 
