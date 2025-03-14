@@ -8,6 +8,8 @@ Parsql için PostgreSQL entegrasyon küfesidir. Bu paket, parsql'in PostgreSQL v
 - Otomatik SQL sorgu oluşturma 
 - Güvenli parametre yönetimi
 - Generic CRUD işlemleri (get, insert, update, delete)
+- Client nesnesi için extension metotları
+- Transaction desteği
 - Veritabanı satırlarını struct'lara dönüştürme
 - SQL Injection saldırılarına karşı otomatik koruma
 
@@ -61,6 +63,106 @@ parsql-postgres = "0.3.2"
 parsql-macros = "0.3.2"
 postgres = "0.19"
 ```
+
+## Kullanım
+
+parsql-postgres ile çalışmak için iki farklı yaklaşım kullanabilirsiniz:
+
+### 1. Fonksiyon Tabanlı Yaklaşım
+
+```rust
+use postgres::{Client, NoTls};
+use parsql::postgres::{get, insert};
+use parsql::macros::{Insertable, SqlParams, Queryable, FromRow};
+
+#[derive(Insertable, SqlParams)]
+#[table("users")]
+struct InsertUser {
+    name: String,
+    email: String,
+}
+
+#[derive(Queryable, FromRow, SqlParams)]
+#[table("users")]
+#[where_clause("id = $1")]
+struct GetUser {
+    id: i32,
+    name: String,
+    email: String,
+}
+
+fn main() -> Result<(), postgres::Error> {
+    let mut client = Client::connect("host=localhost user=postgres", NoTls)?;
+    
+    // Fonksiyon yaklaşımı ile kullanıcı ekleme
+    let insert_user = InsertUser {
+        name: "John".to_string(),
+        email: "john@example.com".to_string(),
+    };
+    let rows_affected = insert(&mut client, insert_user)?;
+    
+    // Fonksiyon yaklaşımı ile kullanıcı getirme
+    let get_user = GetUser {
+        id: 1,
+        name: String::new(),
+        email: String::new(),
+    };
+    let user = get(&mut client, &get_user)?;
+    
+    println!("Kullanıcı: {:?}", user);
+    Ok(())
+}
+```
+
+### 2. Extension Metot Yaklaşımı (CrudOps Trait)
+
+Bu yaklaşımda, `CrudOps` trait'i sayesinde CRUD işlemlerini doğrudan `Client` nesnesi üzerinden çağırabilirsiniz:
+
+```rust
+use postgres::{Client, NoTls};
+use parsql::postgres::CrudOps;  // CrudOps trait'ini içe aktar
+use parsql::macros::{Insertable, SqlParams, Queryable, FromRow};
+
+#[derive(Insertable, SqlParams)]
+#[table("users")]
+struct InsertUser {
+    name: String,
+    email: String,
+}
+
+#[derive(Queryable, FromRow, SqlParams)]
+#[table("users")]
+#[where_clause("id = $1")]
+struct GetUser {
+    id: i32,
+    name: String,
+    email: String,
+}
+
+fn main() -> Result<(), postgres::Error> {
+    let mut client = Client::connect("host=localhost user=postgres", NoTls)?;
+    
+    // Extension metot yaklaşımı ile kullanıcı ekleme
+    let insert_user = InsertUser {
+        name: "John".to_string(),
+        email: "john@example.com".to_string(),
+    };
+    let rows_affected = client.insert(insert_user)?;
+    
+    // Extension metot yaklaşımı ile kullanıcı getirme
+    let get_user = GetUser {
+        id: 1,
+        name: String::new(),
+        email: String::new(),
+    };
+    let user = client.get(&get_user)?;
+    
+    println!("Kullanıcı: {:?}", user);
+    Ok(())
+}
+```
+
+Extension metot yaklaşımı, özellikle birden fazla CRUD işleminin aynı anda yapıldığı durumlarda kodunuzu daha okunabilir ve akıcı hale getirir.
 
 ## Temel Kullanım
 
@@ -183,3 +285,111 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Veri Güncelleme (Update) İşlemi
 
 ```
+
+## Transaction İşlemleri
+
+parsql-postgres ile transaction işlemlerini iki farklı şekilde gerçekleştirebilirsiniz:
+
+### 1. CrudOps Trait'i ile Transaction Kullanımı
+
+Bu yaklaşımda, `CrudOps` trait'i `Transaction` struct'ı için de implemente edilmiştir, böylece doğrudan transaction nesnesi üzerinden CRUD işlemlerini yapabilirsiniz:
+
+```rust
+use postgres::{Client, NoTls};
+use parsql::postgres::CrudOps;  // CrudOps trait'ini içe aktar
+use parsql::macros::{Insertable, SqlParams, Updateable, UpdateParams};
+
+#[derive(Insertable, SqlParams)]
+#[table("users")]
+struct InsertUser {
+    name: String,
+    email: String,
+}
+
+#[derive(Updateable, UpdateParams)]
+#[table("users")]
+#[update("email")]
+#[where_clause("id = $")]
+struct UpdateUser {
+    id: i32,
+    email: String,
+}
+
+fn main() -> Result<(), postgres::Error> {
+    let mut client = Client::connect("host=localhost user=postgres", NoTls)?;
+    
+    // Transaction başlat
+    let mut tx = client.transaction()?;
+    
+    // Transaction üzerinde CrudOps metotlarını kullan
+    let insert_user = InsertUser {
+        name: "Ali".to_string(),
+        email: "ali@example.com".to_string(),
+    };
+    let rows_affected = tx.insert(insert_user)?;
+    
+    let update_user = UpdateUser {
+        id: 1,
+        email: "ali.updated@example.com".to_string(),
+    };
+    let rows_updated = tx.update(update_user)?;
+    
+    // Transaction'ı tamamla
+    tx.commit()?;
+    Ok(())
+}
+```
+
+### 2. Transaction Yardımcı Fonksiyonları ile Kullanım
+
+Bu yaklaşımda, `transactional` modülündeki yardımcı fonksiyonları kullanarak method chaining yaklaşımıyla işlemlerinizi gerçekleştirebilirsiniz:
+
+```rust
+use postgres::{Client, NoTls};
+use parsql::postgres::transactional::{begin, tx_insert, tx_update};
+use parsql::macros::{Insertable, SqlParams, Updateable, UpdateParams};
+
+#[derive(Insertable, SqlParams)]
+#[table("users")]
+struct InsertUser {
+    name: String,
+    email: String,
+}
+
+#[derive(Updateable, UpdateParams)]
+#[table("users")]
+#[update("email")]
+#[where_clause("id = $")]
+struct UpdateUser {
+    id: i32,
+    email: String,
+}
+
+fn main() -> Result<(), postgres::Error> {
+    let mut client = Client::connect("host=localhost user=postgres", NoTls)?;
+    
+    // Transaction başlat
+    let tx = begin(&mut client)?;
+    
+    // Transaction işlemlerini zincirleme (method chaining) şeklinde gerçekleştir
+    let insert_user = InsertUser {
+        name: "Ali".to_string(),
+        email: "ali@example.com".to_string(),
+    };
+    
+    let (tx, _) = tx_insert(tx, insert_user)?;
+    
+    let update_user = UpdateUser {
+        id: 1,
+        email: "ali.updated@example.com".to_string(),
+    };
+    
+    let (tx, _) = tx_update(tx, update_user)?;
+    
+    // Transaction'ı tamamla
+    tx.commit()?;
+    Ok(())
+}
+```
+
+Bu yaklaşım, özellikle transaction içinde birden fazla işlem gerçekleştirirken, transaction nesnesinin sürekli olarak elde edilebilmesini sağlar ve kod okunabilirliğini artırır.

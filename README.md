@@ -11,6 +11,7 @@ Parsql, SQL sorgularınızı doğrudan Rust struct'ları üzerinden yönetmenize
 - Dinamik SQL oluşturabilir ve karmaşık sorgular çalıştırabilirsiniz
 - Asenkron veritabanı işlemlerini kolayca gerçekleştirebilirsiniz
 - SQL injection saldırılarına karşı otomatik koruma sağlayabilirsiniz
+- Doğrudan `Pool` ve `Transaction` nesneleri üzerinde extension method'lar kullanabilirsiniz
 
 Parsql standart bir ORM değildir. Daha çok, SQL yazımını ve kullanımını basitleştirmeye odaklanır.
 
@@ -29,22 +30,22 @@ Uygulamanıza küfeyi yüklerken hangi veritabanı ile çalışacağınızı 'fe
 
 ### SQLite için
 ```toml
-parsql = { version = "0.3.2", features = ["sqlite"] }
+parsql = { version = "0.3.3", features = ["sqlite"] }
 ```
 
 ### PostgreSQL için
 ```toml
-parsql = { version = "0.3.2", features = ["postgres"] }
+parsql = { version = "0.3.3", features = ["postgres"] }
 ```
 
 ### Tokio PostgreSQL için
 ```toml
-parsql = { version = "0.3.2", features = ["tokio-postgres"] }
+parsql = { version = "0.3.3", features = ["tokio-postgres"] }
 ```
 
 ### Deadpool PostgreSQL bağlantı havuzu için
 ```toml
-parsql = { version = "0.3.2", features = ["deadpool-postgres"] }
+parsql = { version = "0.3.3", features = ["deadpool-postgres"] }
 ```
 
 ## Temel Özellikler
@@ -59,6 +60,71 @@ Parsql, veritabanı işlemlerini kolaylaştırmak için çeşitli procedural mak
 - `#[derive(FromRow)]` - Veritabanı sonuçlarını nesnelere dönüştürmek için
 - `#[derive(SqlParams)]` - SQL parametrelerini yapılandırmak için
 - `#[derive(UpdateParams)]` - Güncelleme parametrelerini yapılandırmak için
+
+### Extension Metodu Kullanımı
+
+Parsql, 0.3.3 sürümünden itibaren, CRUD işlemlerini doğrudan veritabanı nesneleri üzerinden yapmanızı sağlayan extension metotları sunmaktadır. Bu yaklaşım sayesinde kodunuz daha akıcı ve okunabilir hale gelir.
+
+#### Pool Nesnesi Üzerinde Extension Metodları
+
+Bağlantı havuzu (Pool) nesneleri üzerinde doğrudan CRUD işlemleri yapabilirsiniz:
+
+```rust
+// Geleneksel kullanım
+let rows_affected = insert(&pool, user).await?;
+
+// Extension metodu ile kullanım
+use parsql_deadpool_postgres::CrudOps;
+let rows_affected = pool.insert(user).await?;
+```
+
+#### Transaction Nesnesi Üzerinde Extension Metodları
+
+Transaction nesneleri üzerinde doğrudan CRUD işlemleri yapabilirsiniz:
+
+```rust
+// Geleneksel kullanım
+let (tx, rows_affected) = tx_insert(tx, user).await?;
+
+// Extension metodu ile kullanım
+use parsql_deadpool_postgres::TransactionOps;
+let rows_affected = tx.insert(user).await?;
+```
+
+#### Desteklenen Extension Metodları
+
+Hem Pool hem de Transaction nesneleri için şu extension metodları kullanılabilir:
+
+- `insert(entity)` - Kayıt ekler
+- `update(entity)` - Kayıt günceller
+- `delete(entity)` - Kayıt siler
+- `get(params)` - Tek bir kayıt getirir
+- `get_all(params)` - Birden fazla kayıt getirir
+- `select(entity, to_model)` - Özel dönüştürücü fonksiyon ile tek kayıt getirir
+- `select_all(entity, to_model)` - Özel dönüştürücü fonksiyon ile çoklu kayıt getirir
+
+### Transaction Desteği
+
+Parsql şu anda aşağıdaki paketlerde transaction desteği sunmaktadır:
+
+- `parsql-postgres` - Senkron PostgreSQL işlemleri için transaction desteği
+- `parsql-tokio-postgres` - Asenkron Tokio-PostgreSQL işlemleri için transaction desteği
+- `parsql-deadpool-postgres` - Asenkron Deadpool PostgreSQL bağlantı havuzu için transaction desteği
+
+Örnek bir transaction kullanımı:
+
+```rust
+// Transaction başlatma
+let client = pool.get().await?;
+let tx = client.transaction().await?;
+
+// Extension method kullanarak transaction içinde işlem yapma
+let result = tx.insert(user).await?;
+let rows_affected = tx.update(user_update).await?;
+
+// İşlem başarılı olursa commit
+tx.commit().await?;
+```
 
 ### Güvenlik Özellikleri
 
@@ -172,14 +238,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### Tokio-Postgres ile Asenkron Kullanım
+### Deadpool PostgreSQL ile Asenkron Bağlantı Havuzu Kullanımı
 
 ```rust
-use parsql::{
-    tokio_postgres::{get, insert},
-    macros::{Queryable, Insertable, FromRow, SqlParams},
-};
-use tokio_postgres::{NoTls, Error};
+use parsql_deadpool_postgres::{CrudOps, TransactionOps};
+use tokio_postgres::NoTls;
+use deadpool_postgres::{Config, Runtime};
+use parsql_macros::{Queryable, Insertable, FromRow, SqlParams, Updateable};
 
 #[derive(Queryable, FromRow, SqlParams, Debug)]
 #[table("users")]
@@ -190,16 +255,6 @@ pub struct GetUser {
     pub email: String,
 }
 
-impl GetUser {
-    pub fn new(id: i64) -> Self {
-        Self {
-            id,
-            name: Default::default(),
-            email: Default::default(),
-        }
-    }
-}
-
 #[derive(Insertable, SqlParams)]
 #[table("users")]
 pub struct InsertUser {
@@ -207,30 +262,49 @@ pub struct InsertUser {
     pub email: String,
 }
 
+#[derive(Updateable, SqlParams)]
+#[table("users")]
+#[update("name, email")]
+#[where_clause("id = $")]
+pub struct UpdateUser {
+    pub id: i64,
+    pub name: String,
+    pub email: String,
+}
+
 #[tokio::main]
-async fn main() -> Result<(), Error> {
-    let (client, connection) = tokio_postgres::connect(
-        "host=localhost user=postgres dbname=test",
-        NoTls,
-    ).await?;
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Bağlantı havuzu oluşturma
+    let mut cfg = Config::new();
+    cfg.host = Some("localhost".to_string());
+    cfg.user = Some("postgres".to_string());
+    cfg.password = Some("postgres".to_string());
+    cfg.dbname = Some("test".to_string());
     
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            eprintln!("Bağlantı hatası: {}", e);
-        }
-    });
+    let pool = cfg.create_pool(Some(Runtime::Tokio1), NoTls)?;
     
+    // Extension method kullanarak kayıt ekleme
     let insert_user = InsertUser {
         name: "Ali".to_string(),
         email: "ali@example.com".to_string(),
     };
+    let rows_affected = pool.insert(insert_user).await?;
+    println!("Eklenen kayıt sayısı: {}", rows_affected);
     
-    let id = insert(&client, insert_user).await?;
-    println!("Eklenen kayıt ID: {}", id);
+    // Transaction kullanımı
+    let client = pool.get().await?;
+    let tx = client.transaction().await?;
     
-    let get_user = GetUser::new(id);
-    let user = get(&client, get_user).await?;
-    println!("Kullanıcı: {:?}", user);
+    // Transaction içinde extension method kullanarak güncelleme
+    let update_user = UpdateUser {
+        id: 1,
+        name: "Ali Güncellendi".to_string(),
+        email: "ali.updated@example.com".to_string(),
+    };
+    let rows_affected = tx.update(update_user).await?;
+    
+    // Başarılı olursa commit
+    tx.commit().await?;
     
     Ok(())
 }
@@ -252,16 +326,27 @@ Her veritabanı adaptörü için daha detaylı bilgi ve örnekler, ilgili alt pa
 - [Tokio PostgreSQL Dökümantasyonu](./parsql-tokio-postgres/README.md)
 - [Deadpool PostgreSQL Dökümantasyonu](./parsql-deadpool-postgres/README.md)
 
-GitHub'daki [örnekler klasöründe](./examples) her veritabanı tipi için kapsamlı örnek projeler bulabilirsiniz.
+## Lisans
 
-## 0.3.0 Sürümündeki Değişiklikler
+Bu proje MIT lisansı altında lisanslanmıştır.
 
-- `join`, `group_by`, `order_by` ve `having` öznitelikleri eklendi
-- `PARSQL_TRACE` çevre değişkeni desteği eklendi
-- Öznitelik isimleri güncellendi (`table_name`→`table`, `update_clause`→`update`, `select_clause`→`select`)
-- `SqlQuery` trait'i eklendi ve trait yapısı sadeleştirildi
-- `parsql-tokio-postgres` paketinde bir özellik olarak mevcut olan `deadpool-postgres`, `parsql-deadpool-postgres` paketi olarak yeniden yapılandırıldı
+Özellikler:
+- Otomatik SQL sorgu üretimi
+- Tip güvenliği sağlayan parametre yönetimi
+- Birden fazla veritabanı sistemi desteği (PostgreSQL, SQLite)
+- Makrolar ile SQL enjeksiyonu koruması
+- Limit ve Offset desteği ile sayfalama işlemleri
 
-## Lisanslama
+### Queryable
 
-Bu kütüphane MIT veya Apache-2.0 lisansı altında lisanslanmıştır.
+Bu türetme makrosu, bir yapıya SELECT sorguları oluşturma yeteneği ekler.
+
+Desteklenen öznitelikler:
+- `table`: SQL tablosunun adı
+- `where_clause`: SQL WHERE ifadesi
+- `select`: SQL SELECT ifadesi
+- `group_by`: SQL GROUP BY ifadesi
+- `having`: SQL HAVING ifadesi
+- `order_by`: SQL ORDER BY ifadesi
+- `limit`: SQL LIMIT ifadesi
+- `offset`: SQL OFFSET ifadesi

@@ -3,6 +3,8 @@ use std::default;
 use example_parsql_postgres::{
     insert_sample::{InsertComment, InsertPost},
     DeleteUser, InsertUser, SelectUser, SelectUserWithPosts, UpdateUser, UserStateStats, UserPostStats,
+    transaction_sample::{transaction_with_crud_ops, transaction_with_helper_functions, transaction_with_rollback, complex_transaction_example, transaction_with_delete},
+    pagination_sample::{run_pagination_examples, run_derive_pagination_examples},
 };
 use parsql::postgres::{get_all, insert, select, update, delete};
 use postgres::{Client, NoTls};
@@ -14,7 +16,7 @@ fn init_connection() -> Client {
     )
     .expect("Postgresql ile bağlantı aşamasında bir hata oluştu!");
 
-    // Tabloları oluştur ve örnek veriler ekle
+    // Tabloları oluştur ve örnek veriler ekle,
     let _ = client.batch_execute(
         "
     DROP TABLE IF EXISTS comments;
@@ -44,7 +46,7 @@ fn init_connection() -> Client {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
-    -- Örnek veriler
+    -- Temel örnek veriler
     INSERT INTO users (name, email, state) VALUES 
         ('Admin', 'admin@example.com', 1),
         ('User1', 'user1@example.com', 1),
@@ -61,6 +63,27 @@ fn init_connection() -> Client {
         (1, 'Another comment on admin post 1', 1),
         (2, 'Comment on admin post 2', 1),
         (3, 'Comment on User1 post', 1);
+        
+    -- Sayfalama örnekleri için daha fazla test verisi
+    INSERT INTO users (name, email, state) VALUES 
+        ('User3', 'user3@example.com', 1),
+        ('User4', 'user4@example.com', 1),
+        ('User5', 'user5@example.com', 2),
+        ('User6', 'user6@example.com', 1),
+        ('User7', 'user7@example.com', 1),
+        ('User8', 'user8@example.com', 2),
+        ('User9', 'user9@example.com', 1),
+        ('User10', 'user10@example.com', 1),
+        ('User11', 'user11@example.com', 2),
+        ('User12', 'user12@example.com', 1),
+        ('User13', 'user13@example.com', 1),
+        ('User14', 'user14@example.com', 2),
+        ('User15', 'user15@example.com', 1),
+        ('User16', 'user16@example.com', 1),
+        ('User17', 'user17@example.com', 2),
+        ('User18', 'user18@example.com', 1),
+        ('User19', 'user19@example.com', 1),
+        ('User20', 'user20@example.com', 2);
     ",
     ).expect("Tablo oluşturma işlemi başarısız oldu!");
     
@@ -171,4 +194,30 @@ fn main() {
     let user_to_delete = DeleteUser { id: user_id };
     let deleted_count = delete(&mut db, user_to_delete).expect("Kullanıcı silme hatası");
     println!("Silinen kullanıcı sayısı: {}", deleted_count);
+
+    // 4. Transaction İşlemleri
+    println!("\n4. Transaction İşlemleri:");
+    
+    // CrudOps trait'inin Transaction için kullanımı
+    transaction_with_crud_ops(&mut db).expect("Transaction ile işlemler başarısız oldu");
+    
+    // Yardımcı fonksiyonlarla transaction kullanımı
+    transaction_with_helper_functions(&mut db).expect("Transaction yardımcı fonksiyonları başarısız oldu");
+    
+    // Hata durumunda rollback örneği
+    transaction_with_rollback(&mut db).expect("Rollback örneği başarısız oldu");
+    
+    // Karmaşık transaction örneği
+    complex_transaction_example(&mut db).expect("Karmaşık transaction örneği başarısız oldu");
+    
+    // Silme işlemi içeren transaction örneği
+    transaction_with_delete(&mut db).expect("Silme işlemi içeren transaction örneği başarısız oldu");
+    
+    // 5. Sayfalama Örnekleri
+    run_pagination_examples(&mut db).expect("Sayfalama örnekleri başarısız oldu");
+
+    // 6. Derive Makrosu ile Sayfalama Örnekleri
+    run_derive_pagination_examples(&mut db).expect("Derive makro ile sayfalama örnekleri başarısız oldu");
 }
+
+

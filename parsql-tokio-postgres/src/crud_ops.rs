@@ -1,6 +1,390 @@
-use tokio_postgres::{Error, Row};
+use tokio_postgres::{Error, Row, Client, Transaction};
 use crate::{SqlQuery, SqlParams, UpdateParams, FromRow};
 
+/// A trait for extending PostgreSQL client with CRUD operations.
+///
+/// This trait provides extension methods for tokio_postgres::Client to perform
+/// common database CRUD operations in a more ergonomic way.
+pub trait CrudOps {
+    /// Inserts a new record into the database.
+    ///
+    /// # Arguments
+    /// * `entity` - Data object to be inserted (must implement SqlQuery and SqlParams traits)
+    ///
+    /// # Return Value
+    /// * `Result<u64, Error>` - On success, returns the number of inserted records; on failure, returns Error
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use tokio_postgres::{NoTls, Client};
+    /// # use parsql::tokio_postgres::CrudOps;
+    /// # use parsql::macros::{Insertable, SqlParams};
+    /// #
+    /// #[derive(Insertable, SqlParams)]
+    /// #[table("users")]
+    /// struct InsertUser {
+    ///     name: String,
+    ///     email: String,
+    /// }
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let (client, connection) = tokio_postgres::connect("", NoTls).await?;
+    /// # tokio::spawn(async move { connection.await; });
+    /// let user = InsertUser {
+    ///     name: "John".to_string(),
+    ///     email: "john@example.com".to_string(),
+    /// };
+    ///
+    /// let id = client.insert(user).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    async fn insert<T: SqlQuery + SqlParams>(&self, entity: T) -> Result<u64, Error>;
+
+    /// Updates an existing record in the database.
+    ///
+    /// # Arguments
+    /// * `entity` - Data object containing the update information (must implement SqlQuery and UpdateParams traits)
+    ///
+    /// # Return Value
+    /// * `Result<bool, Error>` - On success, returns true if at least one record was updated; on failure, returns Error
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use tokio_postgres::{NoTls, Client};
+    /// # use parsql::tokio_postgres::CrudOps;
+    /// # use parsql::macros::{Updateable, UpdateParams};
+    /// #
+    /// #[derive(Updateable, UpdateParams)]
+    /// #[table("users")]
+    /// #[update("name, email")]
+    /// #[where_clause("id = $")]
+    /// struct UpdateUser {
+    ///     id: i64,
+    ///     name: String,
+    ///     email: String,
+    /// }
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let (client, connection) = tokio_postgres::connect("", NoTls).await?;
+    /// # tokio::spawn(async move { connection.await; });
+    /// let user = UpdateUser {
+    ///     id: 1,
+    ///     name: "John Smith".to_string(),
+    ///     email: "john.smith@example.com".to_string(),
+    /// };
+    ///
+    /// let updated = client.update(user).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    async fn update<T: SqlQuery + UpdateParams>(&self, entity: T) -> Result<bool, Error>;
+
+    /// Deletes a record from the database.
+    ///
+    /// # Arguments
+    /// * `entity` - Data object containing delete conditions (must implement SqlQuery and SqlParams traits)
+    ///
+    /// # Return Value
+    /// * `Result<u64, Error>` - On success, returns the number of deleted records; on failure, returns Error
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use tokio_postgres::{NoTls, Client};
+    /// # use parsql::tokio_postgres::CrudOps;
+    /// # use parsql::macros::{Deletable, SqlParams};
+    /// #
+    /// #[derive(Deletable, SqlParams)]
+    /// #[table("users")]
+    /// #[where_clause("id = $")]
+    /// struct DeleteUser {
+    ///     id: i64,
+    /// }
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let (client, connection) = tokio_postgres::connect("", NoTls).await?;
+    /// # tokio::spawn(async move { connection.await; });
+    /// let user = DeleteUser { id: 1 };
+    ///
+    /// let deleted = client.delete(user).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    async fn delete<T: SqlQuery + SqlParams>(&self, entity: T) -> Result<u64, Error>;
+
+    /// Retrieves a single record from the database and converts it to a struct.
+    ///
+    /// # Arguments
+    /// * `params` - Data object containing query parameters (must implement SqlQuery, FromRow, and SqlParams traits)
+    ///
+    /// # Return Value
+    /// * `Result<T, Error>` - On success, returns the retrieved record as a struct; on failure, returns Error
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use tokio_postgres::{NoTls, Client};
+    /// # use parsql::tokio_postgres::CrudOps;
+    /// # use parsql::macros::{Queryable, FromRow, SqlParams};
+    /// #
+    /// #[derive(Queryable, FromRow, SqlParams, Debug)]
+    /// #[table("users")]
+    /// #[where_clause("id = $")]
+    /// struct GetUser {
+    ///     id: i64,
+    ///     name: String,
+    ///     email: String,
+    /// }
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let (client, connection) = tokio_postgres::connect("", NoTls).await?;
+    /// # tokio::spawn(async move { connection.await; });
+    /// let query = GetUser {
+    ///     id: 1,
+    ///     name: Default::default(),
+    ///     email: Default::default(),
+    /// };
+    ///
+    /// let user = client.get(query).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    async fn get<T: SqlQuery + FromRow + SqlParams>(&self, params: T) -> Result<T, Error>;
+
+    /// Retrieves multiple records from the database and converts them to a vec of structs.
+    ///
+    /// # Arguments
+    /// * `params` - Data object containing query parameters (must implement SqlQuery, FromRow, and SqlParams traits)
+    ///
+    /// # Return Value
+    /// * `Result<Vec<T>, Error>` - On success, returns a vector of retrieved records; on failure, returns Error
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use tokio_postgres::{NoTls, Client};
+    /// # use parsql::tokio_postgres::CrudOps;
+    /// # use parsql::macros::{Queryable, FromRow, SqlParams};
+    /// #
+    /// #[derive(Queryable, FromRow, SqlParams, Debug)]
+    /// #[table("users")]
+    /// #[where_clause("state = $")]
+    /// struct GetActiveUsers {
+    ///     id: i64,
+    ///     name: String,
+    ///     email: String,
+    ///     state: i16,
+    /// }
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let (client, connection) = tokio_postgres::connect("", NoTls).await?;
+    /// # tokio::spawn(async move { connection.await; });
+    /// let query = GetActiveUsers {
+    ///     id: 0,
+    ///     name: Default::default(),
+    ///     email: Default::default(),
+    ///     state: 1, // active users
+    /// };
+    ///
+    /// let users = client.get_all(query).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    async fn get_all<T: SqlQuery + FromRow + SqlParams>(&self, params: T) -> Result<Vec<T>, Error>;
+
+    /// Executes a custom SELECT query and converts the results using the provided function.
+    ///
+    /// # Arguments
+    /// * `entity` - Data object containing query parameters (must implement SqlQuery and SqlParams traits)
+    /// * `to_model` - Function to convert a row to the desired type
+    ///
+    /// # Return Value
+    /// * `Result<R, Error>` - On success, returns the converted record; on failure, returns Error
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use tokio_postgres::{NoTls, Client, Row};
+    /// # use parsql::tokio_postgres::CrudOps;
+    /// # use parsql::macros::{Queryable, SqlParams};
+    /// #
+    /// #[derive(Queryable, SqlParams)]
+    /// #[table("users")]
+    /// #[select("SELECT u.*, p.role FROM users u JOIN profiles p ON u.id = p.user_id")]
+    /// #[where_clause("u.state = $")]
+    /// struct UserQuery {
+    ///     state: i16,
+    /// }
+    ///
+    /// struct UserWithRole {
+    ///     id: i64,
+    ///     name: String,
+    ///     role: String,
+    /// }
+    ///
+    /// fn convert_row(row: &Row) -> Result<UserWithRole, tokio_postgres::Error> {
+    ///     Ok(UserWithRole {
+    ///         id: row.try_get("id")?,
+    ///         name: row.try_get("name")?,
+    ///         role: row.try_get("role")?,
+    ///     })
+    /// }
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let (client, connection) = tokio_postgres::connect("", NoTls).await?;
+    /// # tokio::spawn(async move { connection.await; });
+    /// let query = UserQuery { state: 1 };
+    ///
+    /// let user = client.select(query, convert_row).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    async fn select<T: SqlQuery + SqlParams, F, R>(&self, entity: T, to_model: F) -> Result<R, Error>
+    where
+        F: Fn(&Row) -> Result<R, Error>;
+
+    /// Executes a custom SELECT query and converts all the results using the provided function.
+    ///
+    /// # Arguments
+    /// * `entity` - Data object containing query parameters (must implement SqlQuery and SqlParams traits)
+    /// * `to_model` - Function to convert a row to the desired type
+    ///
+    /// # Return Value
+    /// * `Result<Vec<R>, Error>` - On success, returns a vector of converted records; on failure, returns Error
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use tokio_postgres::{NoTls, Client, Row};
+    /// # use parsql::tokio_postgres::CrudOps;
+    /// # use parsql::macros::{Queryable, SqlParams};
+    /// #
+    /// #[derive(Queryable, SqlParams)]
+    /// #[table("users")]
+    /// #[select("SELECT u.*, p.role FROM users u JOIN profiles p ON u.id = p.user_id")]
+    /// #[where_clause("u.state = $")]
+    /// struct UserQuery {
+    ///     state: i16,
+    /// }
+    ///
+    /// struct UserWithRole {
+    ///     id: i64,
+    ///     name: String,
+    ///     role: String,
+    /// }
+    ///
+    /// fn convert_row(row: &Row) -> UserWithRole {
+    ///     UserWithRole {
+    ///         id: row.get("id"),
+    ///         name: row.get("name"),
+    ///         role: row.get("role"),
+    ///     }
+    /// }
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let (client, connection) = tokio_postgres::connect("", NoTls).await?;
+    /// # tokio::spawn(async move { connection.await; });
+    /// let query = UserQuery { state: 1 };
+    ///
+    /// let users = client.select_all(query, convert_row).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    async fn select_all<T: SqlQuery + SqlParams, F, R>(&self, entity: T, to_model: F) -> Result<Vec<R>, Error>
+    where
+        F: Fn(&Row) -> R;
+}
+
+impl CrudOps for Client {
+    async fn insert<T: SqlQuery + SqlParams>(&self, entity: T) -> Result<u64, Error> {
+        let sql = T::query();
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-TOKIO-POSTGRES] Execute SQL: {}", sql);
+        }
+
+        let params = entity.params();
+        self.execute(&sql, &params).await
+    }
+
+    async fn update<T: SqlQuery + UpdateParams>(&self, entity: T) -> Result<bool, Error> {
+        let sql = T::query();
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-TOKIO-POSTGRES] Execute SQL: {}", sql);
+        }
+
+        let params = entity.params();
+        let result = self.execute(&sql, &params).await?;
+        Ok(result > 0)
+    }
+
+    async fn delete<T: SqlQuery + SqlParams>(&self, entity: T) -> Result<u64, Error> {
+        let sql = T::query();
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-TOKIO-POSTGRES] Execute SQL: {}", sql);
+        }
+
+        let params = entity.params();
+        self.execute(&sql, &params).await
+    }
+
+    async fn get<T: SqlQuery + FromRow + SqlParams>(&self, params: T) -> Result<T, Error> {
+        let sql = T::query();
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-TOKIO-POSTGRES] Execute SQL: {}", sql);
+        }
+
+        let query_params = params.params();
+        let row = self.query_one(&sql, &query_params).await?;
+        T::from_row(&row)
+    }
+
+    async fn get_all<T: SqlQuery + FromRow + SqlParams>(&self, params: T) -> Result<Vec<T>, Error> {
+        let sql = T::query();
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-TOKIO-POSTGRES] Execute SQL: {}", sql);
+        }
+
+        let query_params = params.params();
+        let rows = self.query(&sql, &query_params).await?;
+        
+        let mut results = Vec::with_capacity(rows.len());
+        for row in rows {
+            results.push(T::from_row(&row)?);
+        }
+        
+        Ok(results)
+    }
+
+    async fn select<T: SqlQuery + SqlParams, F, R>(&self, entity: T, to_model: F) -> Result<R, Error>
+    where
+        F: Fn(&Row) -> Result<R, Error>,
+    {
+        let sql = T::query();
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-TOKIO-POSTGRES] Execute SQL: {}", sql);
+        }
+
+        let params = entity.params();
+        let row = self.query_one(&sql, &params).await?;
+        to_model(&row)
+    }
+
+    async fn select_all<T: SqlQuery + SqlParams, F, R>(&self, entity: T, to_model: F) -> Result<Vec<R>, Error>
+    where
+        F: Fn(&Row) -> R,
+    {
+        let sql = T::query();
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-TOKIO-POSTGRES] Execute SQL: {}", sql);
+        }
+
+        let params = entity.params();
+        let rows = self.query(&sql, &params).await?;
+        
+        let mut results = Vec::with_capacity(rows.len());
+        for row in rows {
+            results.push(to_model(&row));
+        }
+        
+        Ok(results)
+    }
+}
 /// # insert
 /// 
 /// Inserts a new record into the database.
@@ -68,16 +452,10 @@ use crate::{SqlQuery, SqlParams, UpdateParams, FromRow};
 /// }
 /// ```
 pub async fn insert<T: SqlQuery + SqlParams>(
-    client: &tokio_postgres::Client,
+    client: &Client,
     entity: T,
 ) -> Result<u64, Error> {
-    let sql = T::query();
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
-        println!("[PARSQL-TOKIO-POSTGRES] Execute SQL: {}", sql);
-    }
-
-    let params = entity.params();
-    client.execute(&sql, &params).await
+    client.insert(entity).await
 }
 
 /// # update
@@ -154,17 +532,10 @@ pub async fn insert<T: SqlQuery + SqlParams>(
 /// }
 /// ```
 pub async fn update<T: SqlQuery + UpdateParams>(
-    client: &tokio_postgres::Client,
+    client: &Client,
     entity: T,
 ) -> Result<bool, Error> {
-    let sql = T::query();
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
-        println!("[PARSQL-TOKIO-POSTGRES] Execute SQL: {}", sql);
-    }
-
-    let params = entity.params();
-    let result = client.execute(&sql, &params).await?;
-    Ok(result > 0)
+    client.update(entity).await
 }
 
 /// # delete
@@ -230,16 +601,10 @@ pub async fn update<T: SqlQuery + UpdateParams>(
 /// }
 /// ```
 pub async fn delete<T: SqlQuery + SqlParams>(
-    client: &tokio_postgres::Client,
+    client: &Client,
     entity: T,
 ) -> Result<u64, Error> {
-    let sql = T::query();
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
-        println!("[PARSQL-TOKIO-POSTGRES] Execute SQL: {}", sql);
-    }
-
-    let params = entity.params();
-    client.execute(&sql, &params).await
+    client.delete(entity).await
 }
 
 /// # get
@@ -287,7 +652,6 @@ pub async fn delete<T: SqlQuery + SqlParams>(
 ///     pub id: i64,
 ///     pub name: String,
 ///     pub email: String,
-///     pub state: i16,
 /// }
 ///
 /// impl GetUser {
@@ -296,7 +660,6 @@ pub async fn delete<T: SqlQuery + SqlParams>(
 ///             id,
 ///             name: Default::default(),
 ///             email: Default::default(),
-///             state: Default::default(),
 ///         }
 ///     }
 /// }
@@ -321,19 +684,10 @@ pub async fn delete<T: SqlQuery + SqlParams>(
 /// }
 /// ```
 pub async fn get<T: SqlQuery + FromRow + SqlParams>(
-    client: &tokio_postgres::Client,
-    params: &T,
+    client: &Client,
+    params: T,
 ) -> Result<T, Error> {
-    let sql = T::query();
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
-        println!("[PARSQL-TOKIO-POSTGRES] Execute SQL: {}", sql);
-    }
-
-    let params = params.params();
-    match client.query_one(&sql, &params).await {
-        Ok(_row) => T::from_row(&_row),
-        Err(e) => Err(e),
-    }
+    client.get(params).await
 }
 
 /// # get_all
@@ -479,19 +833,10 @@ pub async fn get<T: SqlQuery + FromRow + SqlParams>(
 /// }
 /// ```
 pub async fn get_all<T: SqlQuery + FromRow + SqlParams>(
-    client: &tokio_postgres::Client,
-    params: &T,
+    client: &Client,
+    params: T,
 ) -> Result<Vec<T>, Error> {
-    let sql = T::query();
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
-        println!("[PARSQL-TOKIO-POSTGRES] Execute SQL: {}", sql);
-    }
-    let params = params.params();
-    let rows = client.query(&sql, &params).await?;
-    
-    rows.iter()
-        .map(|row| T::from_row(row))
-        .collect::<Result<Vec<_>, _>>()
+    client.get_all(params).await
 }
 
 /// # select
@@ -582,24 +927,14 @@ pub async fn get_all<T: SqlQuery + FromRow + SqlParams>(
 /// }
 /// ```
 pub async fn select<T: SqlQuery + SqlParams, F>(
-    client: &tokio_postgres::Client,
+    client: &Client,
     entity: T,
     to_model: F,
 ) -> Result<T, Error>
 where
     F: Fn(&Row) -> Result<T, Error>,
 {
-    let sql = T::query();
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
-        println!("[PARSQL-TOKIO-POSTGRES] Execute SQL: {}", sql);
-    }
-
-    let params = entity.params();
-
-    match client.query_one(&sql, &params).await {
-        Ok(_row) => to_model(&_row),
-        Err(e) => Err(e),
-    }
+    client.select(entity, to_model).await
 }
 
 /// # select_all
@@ -692,23 +1027,12 @@ where
 /// }
 /// ```
 pub async fn select_all<T: SqlQuery + SqlParams, F>(
-    client: &tokio_postgres::Client,
+    client: &Client,
     entity: T,
     to_model: F,
 ) -> Result<Vec<T>, Error>
 where
     F: Fn(&Row) -> T,
 {
-    let sql = T::query();
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
-        println!("[PARSQL-TOKIO-POSTGRES] Execute SQL: {}", sql);
-    }
-
-    let params = entity.params();
-
-    let rows = client.query(&sql, &params).await?;
-
-    let all_datas: Vec<T> = rows.iter().map(|row| to_model(row)).collect();
-
-    Ok(all_datas)
+    client.select_all(entity, to_model).await
 }

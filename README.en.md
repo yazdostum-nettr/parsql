@@ -11,6 +11,7 @@ Parsql is a library that allows you to manage SQL queries directly through Rust 
 - Create dynamic SQL and execute complex queries
 - Easily perform asynchronous database operations
 - Get automatic protection against SQL injection attacks
+- Use extension methods directly on `Pool` and `Transaction` objects
 
 Parsql is not a standard ORM. Instead, it focuses on simplifying SQL writing and usage.
 
@@ -29,22 +30,22 @@ When adding the crate to your application, you need to specify which database yo
 
 ### For SQLite
 ```toml
-parsql = { version = "0.3.2", features = ["sqlite"] }
+parsql = { version = "0.3.3", features = ["sqlite"] }
 ```
 
 ### For PostgreSQL
 ```toml
-parsql = { version = "0.3.2", features = ["postgres"] }
+parsql = { version = "0.3.3", features = ["postgres"] }
 ```
 
 ### For Tokio PostgreSQL
 ```toml
-parsql = { version = "0.3.2", features = ["tokio-postgres"] }
+parsql = { version = "0.3.3", features = ["tokio-postgres"] }
 ```
 
 ### For Deadpool PostgreSQL connection pool
 ```toml
-parsql = { version = "0.3.2", features = ["deadpool-postgres"] }
+parsql = { version = "0.3.3", features = ["deadpool-postgres"] }
 ```
 
 ## Core Features
@@ -59,6 +60,71 @@ Parsql offers various procedural macros to facilitate database operations:
 - `#[derive(FromRow)]` - For converting database results to objects
 - `#[derive(SqlParams)]` - For configuring SQL parameters
 - `#[derive(UpdateParams)]` - For configuring update parameters
+
+### Extension Method Usage
+
+Since version 0.3.3, Parsql provides extension methods that allow you to perform CRUD operations directly on database objects. This approach makes your code more fluid and readable.
+
+#### Extension Methods on Pool Objects
+
+You can perform CRUD operations directly on connection pool (Pool) objects:
+
+```rust
+// Traditional usage
+let rows_affected = insert(&pool, user).await?;
+
+// Using extension method
+use parsql_deadpool_postgres::CrudOps;
+let rows_affected = pool.insert(user).await?;
+```
+
+#### Extension Methods on Transaction Objects
+
+You can perform CRUD operations directly on Transaction objects:
+
+```rust
+// Traditional usage
+let (tx, rows_affected) = tx_insert(tx, user).await?;
+
+// Using extension method
+use parsql_deadpool_postgres::TransactionOps;
+let rows_affected = tx.insert(user).await?;
+```
+
+#### Supported Extension Methods
+
+The following extension methods are available for both Pool and Transaction objects:
+
+- `insert(entity)` - Inserts a record
+- `update(entity)` - Updates a record
+- `delete(entity)` - Deletes a record
+- `get(params)` - Retrieves a single record
+- `get_all(params)` - Retrieves multiple records
+- `select(entity, to_model)` - Retrieves a single record with a custom transformer function
+- `select_all(entity, to_model)` - Retrieves multiple records with a custom transformer function
+
+### Transaction Support
+
+Parsql currently provides transaction support in the following packages:
+
+- `parsql-postgres` - Transaction support for synchronous PostgreSQL operations
+- `parsql-tokio-postgres` - Transaction support for asynchronous Tokio-PostgreSQL operations
+- `parsql-deadpool-postgres` - Transaction support for asynchronous Deadpool PostgreSQL connection pool
+
+Example of transaction usage:
+
+```rust
+// Start a transaction
+let client = pool.get().await?;
+let tx = client.transaction().await?;
+
+// Perform operations within the transaction using extension methods
+let result = tx.insert(user).await?;
+let rows_affected = tx.update(user_update).await?;
+
+// Commit if successful
+tx.commit().await?;
+```
 
 ### Security Features
 
@@ -172,14 +238,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### Asynchronous Usage with Tokio-Postgres
+### Using Deadpool PostgreSQL with Async Connection Pool
 
 ```rust
-use parsql::{
-    tokio_postgres::{get, insert},
-    macros::{Queryable, Insertable, FromRow, SqlParams},
-};
-use tokio_postgres::{NoTls, Error};
+use parsql_deadpool_postgres::{CrudOps, TransactionOps};
+use tokio_postgres::NoTls;
+use deadpool_postgres::{Config, Runtime};
+use parsql_macros::{Queryable, Insertable, FromRow, SqlParams, Updateable};
 
 #[derive(Queryable, FromRow, SqlParams, Debug)]
 #[table("users")]
@@ -190,16 +255,6 @@ pub struct GetUser {
     pub email: String,
 }
 
-impl GetUser {
-    pub fn new(id: i64) -> Self {
-        Self {
-            id,
-            name: Default::default(),
-            email: Default::default(),
-        }
-    }
-}
-
 #[derive(Insertable, SqlParams)]
 #[table("users")]
 pub struct InsertUser {
@@ -207,30 +262,49 @@ pub struct InsertUser {
     pub email: String,
 }
 
+#[derive(Updateable, SqlParams)]
+#[table("users")]
+#[update("name, email")]
+#[where_clause("id = $")]
+pub struct UpdateUser {
+    pub id: i64,
+    pub name: String,
+    pub email: String,
+}
+
 #[tokio::main]
-async fn main() -> Result<(), Error> {
-    let (client, connection) = tokio_postgres::connect(
-        "host=localhost user=postgres dbname=test",
-        NoTls,
-    ).await?;
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create connection pool
+    let mut cfg = Config::new();
+    cfg.host = Some("localhost".to_string());
+    cfg.user = Some("postgres".to_string());
+    cfg.password = Some("postgres".to_string());
+    cfg.dbname = Some("test".to_string());
     
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            eprintln!("Connection error: {}", e);
-        }
-    });
+    let pool = cfg.create_pool(Some(Runtime::Tokio1), NoTls)?;
     
+    // Insert using extension method
     let insert_user = InsertUser {
         name: "John".to_string(),
         email: "john@example.com".to_string(),
     };
+    let rows_affected = pool.insert(insert_user).await?;
+    println!("Number of inserted records: {}", rows_affected);
     
-    let id = insert(&client, insert_user).await?;
-    println!("Inserted record ID: {}", id);
+    // Using transaction
+    let client = pool.get().await?;
+    let tx = client.transaction().await?;
     
-    let get_user = GetUser::new(id);
-    let user = get(&client, get_user).await?;
-    println!("User: {:?}", user);
+    // Update within transaction using extension method
+    let update_user = UpdateUser {
+        id: 1,
+        name: "John Updated".to_string(),
+        email: "john.updated@example.com".to_string(),
+    };
+    let rows_affected = tx.update(update_user).await?;
+    
+    // Commit if successful
+    tx.commit().await?;
     
     Ok(())
 }
@@ -252,16 +326,27 @@ For more detailed information and examples for each database adapter, refer to t
 - [Tokio PostgreSQL Documentation](./parsql-tokio-postgres/README.en.md)
 - [Deadpool PostgreSQL Documentation](./parsql-deadpool-postgres/README.en.md)
 
-You can find comprehensive example projects for each database type in the [examples folder](./examples) on GitHub.
+## License
 
-## Changes in Version 0.3.0
+This project is licensed under the MIT License.
 
-- Added `join`, `group_by`, `order_by`, and `having` attributes
-- Added `PARSQL_TRACE` environment variable support
-- Updated attribute names (`table_name`→`table`, `update_clause`→`update`, `select_clause`→`select`)
-- Added `SqlQuery` trait and simplified trait structure
-- `deadpool-postgres`, which was available as a feature in the `parsql-tokio-postgres` package, has been refactored into the `parsql-deadpool-postgres` package
+Features:
+- Automatic SQL query generation
+- Parameter management with type safety
+- Support for multiple database systems (PostgreSQL, SQLite)
+- SQL injection protection with macros
+- Pagination with Limit and Offset support
 
-## Licensing
+### Queryable
 
-This library is licensed under the MIT or Apache-2.0 license.
+This derivation macro adds the ability to create SELECT queries to a structure.
+
+Supported attributes:
+- `table`: SQL table name
+- `where_clause`: SQL WHERE statement
+- `select`: SQL SELECT statement 
+- `group_by`: SQL GROUP BY statement
+- `having`: SQL HAVING statement
+- `order_by`: SQL ORDER BY statement
+- `limit`: SQL LIMIT statement
+- `offset`: SQL OFFSET statement

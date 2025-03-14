@@ -1,5 +1,248 @@
 use rusqlite::{Error, Row, ToSql};
 use crate::{SqlQuery, SqlParams, UpdateParams, FromRow};
+
+/// CrudOps trait defines the CRUD (Create, Read, Update, Delete) operations
+/// that can be performed on a SQLite database.
+///
+/// This trait is implemented for the `rusqlite::Connection` struct, allowing
+/// CRUD operations to be called as extension methods on a connection.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use rusqlite::{Connection, Result};
+/// use parsql::sqlite::CrudOps;
+/// use parsql::sqlite::macros::{Insertable, SqlParams, Queryable, FromRow};
+///
+/// #[derive(Insertable, SqlParams)]
+/// #[table("users")]
+/// struct InsertUser {
+///     name: String,
+///     email: String,
+/// }
+///
+/// #[derive(Queryable, FromRow, SqlParams)]
+/// #[table("users")]
+/// #[where_clause("id = ?")]
+/// struct GetUser {
+///     id: i64,
+///     name: String,
+///     email: String,
+/// }
+///
+/// fn main() -> Result<()> {
+///     let conn = Connection::open("test.db")?;
+///    
+///     // Extension method for insert
+///     let insert_user = InsertUser {
+///         name: "John".to_string(),
+///         email: "john@example.com".to_string(),
+///     };
+///     let rows_affected = conn.insert(insert_user)?;
+///    
+///     // Extension method for get
+///     let get_user = GetUser {
+///         id: 1,
+///         name: String::new(),
+///         email: String::new(),
+///     };
+///     let user = conn.get(&get_user)?;
+///    
+///     println!("User: {:?}", user);
+///     Ok(())
+/// }
+/// ```
+pub trait CrudOps {
+    /// Inserts a new record into the SQLite database.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object to be inserted (must implement SqlQuery and SqlParams traits)
+    /// 
+    /// # Returns
+    /// * `Result<usize, Error>` - On success, returns the number of inserted records; on failure, returns Error
+    fn insert<T: SqlQuery + SqlParams>(&self, entity: T) -> Result<usize, Error>;
+
+    /// Updates records in the SQLite database.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object containing the update information (must implement SqlQuery and UpdateParams traits)
+    /// 
+    /// # Returns
+    /// * `Result<usize, Error>` - On success, returns the number of updated records; on failure, returns Error
+    fn update<T: SqlQuery + UpdateParams>(&self, entity: T) -> Result<usize, Error>;
+
+    /// Deletes records from the SQLite database.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object containing delete conditions (must implement SqlQuery and SqlParams traits)
+    /// 
+    /// # Returns
+    /// * `Result<usize, Error>` - On success, returns the number of deleted records; on failure, returns Error
+    fn delete<T: SqlQuery + SqlParams>(&self, entity: T) -> Result<usize, Error>;
+
+    /// Retrieves a single record from the SQLite database.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object containing query parameters (must implement SqlQuery, FromRow, and SqlParams traits)
+    /// 
+    /// # Returns
+    /// * `Result<T, Error>` - On success, returns the retrieved record; on failure, returns Error
+    fn get<T: SqlQuery + FromRow + SqlParams>(&self, entity: &T) -> Result<T, Error>;
+
+    /// Retrieves multiple records from the SQLite database.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object containing query parameters (must implement SqlQuery, FromRow, and SqlParams traits)
+    /// 
+    /// # Returns
+    /// * `Result<Vec<T>, Error>` - On success, returns a vector of records; on failure, returns Error
+    fn get_all<T: SqlQuery + FromRow + SqlParams>(&self, entity: &T) -> Result<Vec<T>, Error>;
+
+    /// Executes a custom query and transforms the result using the provided function.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object containing query parameters (must implement SqlQuery and SqlParams traits)
+    /// * `to_model` - Function to transform the database row into the desired type
+    /// 
+    /// # Returns
+    /// * `Result<R, Error>` - On success, returns the transformed result; on failure, returns Error
+    fn select<T: SqlQuery + SqlParams, F, R>(&self, entity: &T, to_model: F) -> Result<R, Error>
+    where
+        F: Fn(&Row) -> Result<R, Error>;
+
+    /// Executes a custom query and transforms all results using the provided function.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object containing query parameters (must implement SqlQuery and SqlParams traits)
+    /// * `to_model` - Function to transform database rows into the desired type
+    /// 
+    /// # Returns
+    /// * `Result<Vec<R>, Error>` - On success, returns a vector of transformed results; on failure, returns Error
+    fn select_all<T: SqlQuery + SqlParams, F, R>(&self, entity: &T, to_model: F) -> Result<Vec<R>, Error>
+    where
+        F: Fn(&Row) -> Result<R, Error>;
+}
+
+// CrudOps trait implementasyonu rusqlite::Connection için
+impl CrudOps for rusqlite::Connection {
+    fn insert<T: SqlQuery + SqlParams>(&self, entity: T) -> Result<usize, Error> {
+        let sql = T::query();
+        
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-SQLITE] Execute SQL: {}", sql);
+        }
+
+        let params = entity.params();
+        let param_refs: Vec<&dyn ToSql> = params.iter().map(|p| *p as &dyn ToSql).collect();
+        
+        self.execute(&sql, param_refs.as_slice())
+    }
+
+    fn update<T: SqlQuery + UpdateParams>(&self, entity: T) -> Result<usize, Error> {
+        let sql = T::query();
+        
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-SQLITE] Execute SQL: {}", sql);
+        }
+
+        let params = entity.params();
+        let param_refs: Vec<&dyn ToSql> = params.iter().map(|p| *p as &dyn ToSql).collect();
+        
+        self.execute(&sql, param_refs.as_slice())
+    }
+
+    fn delete<T: SqlQuery + SqlParams>(&self, entity: T) -> Result<usize, Error> {
+        let sql = T::query();
+        
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-SQLITE] Execute SQL: {}", sql);
+        }
+
+        let params = entity.params();
+        let param_refs: Vec<&dyn ToSql> = params.iter().map(|p| *p as &dyn ToSql).collect();
+        
+        self.execute(&sql, param_refs.as_slice())
+    }
+
+    fn get<T: SqlQuery + FromRow + SqlParams>(&self, entity: &T) -> Result<T, Error> {
+        let sql = T::query();
+        
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-SQLITE] Execute SQL: {}", sql);
+        }
+
+        let params = entity.params();
+        let param_refs: Vec<&dyn ToSql> = params.iter().map(|p| *p as &dyn ToSql).collect();
+        
+        let mut stmt = self.prepare(&sql)?;
+        let row = stmt.query_row(param_refs.as_slice(), |row| T::from_row(row))?;
+        
+        Ok(row)
+    }
+
+    fn get_all<T: SqlQuery + FromRow + SqlParams>(&self, entity: &T) -> Result<Vec<T>, Error> {
+        let sql = T::query();
+        
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-SQLITE] Execute SQL: {}", sql);
+        }
+
+        let params = entity.params();
+        let param_refs: Vec<&dyn ToSql> = params.iter().map(|p| *p as &dyn ToSql).collect();
+        
+        let mut stmt = self.prepare(&sql)?;
+        let rows = stmt.query_map(param_refs.as_slice(), |row| T::from_row(row))?;
+        
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row?);
+        }
+        
+        Ok(results)
+    }
+
+    fn select<T: SqlQuery + SqlParams, F, R>(&self, entity: &T, to_model: F) -> Result<R, Error>
+    where
+        F: Fn(&Row) -> Result<R, Error>,
+    {
+        let sql = T::query();
+        
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-SQLITE] Execute SQL: {}", sql);
+        }
+
+        let params = entity.params();
+        let param_refs: Vec<&dyn ToSql> = params.iter().map(|p| *p as &dyn ToSql).collect();
+        
+        let mut stmt = self.prepare(&sql)?;
+        stmt.query_row(param_refs.as_slice(), to_model)
+    }
+
+    fn select_all<T: SqlQuery + SqlParams, F, R>(&self, entity: &T, to_model: F) -> Result<Vec<R>, Error>
+    where
+        F: Fn(&Row) -> Result<R, Error>,
+    {
+        let sql = T::query();
+        
+        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+            println!("[PARSQL-SQLITE] Execute SQL: {}", sql);
+        }
+
+        let params = entity.params();
+        let param_refs: Vec<&dyn ToSql> = params.iter().map(|p| *p as &dyn ToSql).collect();
+        
+        let mut stmt = self.prepare(&sql)?;
+        let rows = stmt.query_map(param_refs.as_slice(), to_model)?;
+        
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row?);
+        }
+        
+        Ok(results)
+    }
+}
+
 /// # insert
 /// 
 /// Inserts a new record into the SQLite database.
@@ -68,17 +311,7 @@ pub fn insert<T: SqlQuery + SqlParams>(
     conn: &rusqlite::Connection,
     entity: T,
 ) -> Result<usize, rusqlite::Error> {
-    let sql = T::query();
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
-        println!("[PARSQL-SQLITE] Execute SQL: {}", sql);
-    }
-
-    let _params: Vec<&dyn ToSql> = entity.params().iter().map(|p| *p as &dyn ToSql).collect();
-
-    match conn.execute(&sql, _params.as_slice()) {
-        Ok(_result) => Ok(_result),
-        Err(e) => Err(e),
-    }
+    conn.insert(entity)
 }
 
 /// # update
@@ -152,17 +385,7 @@ pub fn update<T: SqlQuery + UpdateParams>(
     conn: &rusqlite::Connection,
     entity: T,
 ) -> Result<usize, Error> {
-    let sql = T::query();
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
-        println!("[PARSQL-SQLITE] Execute SQL: {}", sql);
-    }
-
-    let _params: Vec<&dyn ToSql> = entity.params().iter().map(|p| *p as &dyn ToSql).collect();
-
-    match conn.execute(&sql, _params.as_slice()) {
-        Ok(rows_affected) => Ok(rows_affected),
-        Err(e) => Err(e),
-    }
+    conn.update(entity)
 }
 
 /// # delete
@@ -224,17 +447,7 @@ pub fn delete<T: SqlQuery + SqlParams>(
     conn: &rusqlite::Connection,
     entity: T,
 ) -> Result<usize, Error> {
-    let sql = T::query();
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
-        println!("[PARSQL-SQLITE] Execute SQL: {}", sql);
-    }
-
-    let _params: Vec<&dyn ToSql> = entity.params().iter().map(|p| *p as &dyn ToSql).collect();
-
-    match conn.execute(&sql, _params.as_slice()) {
-        Ok(rows_affected) => Ok(rows_affected),
-        Err(e) => Err(e),
-    }
+    conn.delete(entity)
 }
 
 /// # get
@@ -302,16 +515,9 @@ pub fn delete<T: SqlQuery + SqlParams>(
 /// ```
 pub fn get<T: SqlQuery + FromRow + SqlParams>(
     conn: &rusqlite::Connection,
-    entity: T,
+    entity: &T,
 ) -> Result<T, Error> {
-    let sql = T::query();
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
-        println!("[PARSQL-SQLITE] Execute SQL: {}", sql);
-    }
-
-    let _params: Vec<&dyn ToSql> = entity.params().iter().map(|p| *p as &dyn ToSql).collect();
-
-    conn.query_row(&sql, _params.as_slice(), |row| T::from_row(row))
+    conn.get(entity)
 }
 
 /// # get_all
@@ -382,18 +588,9 @@ pub fn get<T: SqlQuery + FromRow + SqlParams>(
 /// ```
 pub fn get_all<T: SqlQuery + FromRow + SqlParams>(
     conn: &rusqlite::Connection,
-    entity: T,
+    entity: &T,
 ) -> Result<Vec<T>, Error> {
-    let sql = T::query();
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
-        println!("[PARSQL-SQLITE] Execute SQL: {}", sql);
-    }
-    let _params: Vec<&dyn ToSql> = entity.params().iter().map(|p| *p as &dyn ToSql).collect();
-    let mut stmt = conn.prepare(&sql)?;
-
-    let rows = stmt.query_map(_params.as_slice(), |row| T::from_row(row))?;
-    let results = rows.collect::<Result<Vec<_>, _>>()?;
-    Ok(results)
+    conn.get_all(entity)
 }
 
 /// # select
@@ -455,26 +652,15 @@ pub fn get_all<T: SqlQuery + FromRow + SqlParams>(
 ///     Ok(())
 /// }
 /// ```
-pub fn select<T: SqlQuery + SqlParams, F>(
-    conn: &mut rusqlite::Connection,
-    entity: T,
+pub fn select<T: SqlQuery + SqlParams, F, R>(
+    conn: &rusqlite::Connection,
+    entity: &T,
     to_model: F,
-) -> Result<T, Error>
+) -> Result<R, Error>
 where
-    F: Fn(&Row) -> Result<T, Error>,
+    F: Fn(&Row) -> Result<R, Error>,
 {
-
-    let sql = T::query();
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
-        println!("[PARSQL-SQLITE] Execute SQL: {}", sql);
-    }
-
-    let params: Vec<&dyn ToSql> = entity.params().iter().map(|p| *p as &dyn ToSql).collect();
-
-    match conn.query_row(&sql, params.as_slice(), |row| to_model(row)) {
-        Ok(row) => Ok(row),
-        Err(e) => Err(e),
-    }
+    conn.select(entity, to_model)
 }
 
 /// # select_all
@@ -539,25 +725,13 @@ where
 ///     Ok(())
 /// }
 /// ```
-pub fn select_all<T: SqlQuery + SqlParams, F>(
-    conn: &mut rusqlite::Connection,
-    entity: T,
+pub fn select_all<T: SqlQuery + SqlParams, F, R>(
+    conn: &rusqlite::Connection,
+    entity: &T,
     to_model: F,
-) -> Result<Vec<T>, Error>
+) -> Result<Vec<R>, Error>
 where
-    F: Fn(&Row) -> Result<T, Error>,
+    F: Fn(&Row) -> Result<R, Error>,
 {
-    let sql = T::query();
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
-        println!("[PARSQL-SQLITE] Execute SQL: {}", sql);
-    }
-
-    let params: Vec<&dyn ToSql> = entity.params().iter().map(|p| *p as &dyn ToSql).collect();
-
-    let mut stmt = conn.prepare(&sql).unwrap();
-
-    stmt.query_map(params.as_slice(), |row| to_model(row))
-        .map(|iter| iter.collect::<Result<Vec<T>, _>>())
-        .map_err(|err| println!("{:?}", err))
-        .unwrap()
+    conn.select_all(entity, to_model)
 }
