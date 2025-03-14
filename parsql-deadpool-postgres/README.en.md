@@ -9,6 +9,7 @@ Deadpool PostgreSQL integration crate for parsql. This package provides APIs tha
 - Automatic SQL query generation
 - Secure parameter management
 - Generic CRUD operations (get, insert, update, delete)
+- Extension methods for Pool object (direct CRUD operations on pool)
 - Conversion of database rows to structs
 - Custom row transformations
 - Automatic protection against SQL Injection attacks
@@ -139,7 +140,14 @@ struct UserDelete {
 }
 ```
 
-### CRUD Operations
+## CRUD Operations
+
+You can use two different approaches to perform CRUD operations:
+
+1. Using function calls
+2. Using extension methods (directly on the Pool object)
+
+### Using Function Calls
 
 #### Data Insertion
 
@@ -168,8 +176,8 @@ let user = UserUpdate {
     active: true,
 };
 
-let success = update(&pool, user).await?;
-println!("Update successful: {}", success);
+let rows_affected = update(&pool, user).await?;
+println!("Number of updated records: {}", rows_affected);
 ```
 
 #### Data Querying
@@ -196,9 +204,169 @@ let deleted_count = delete(&pool, user_delete).await?;
 println!("Number of deleted records: {}", deleted_count);
 ```
 
-### Custom Row Transformations
+### Using Extension Methods
 
-To transform query results into a different structure:
+To use extension methods that work directly on the Pool object, import the `CrudOps` trait:
+
+```rust
+use parsql_deadpool_postgres::CrudOps;
+
+// Insert using extension method
+let user = UserInsert {
+    name: "John Doe".to_string(),
+    email: "john@example.com".to_string(),
+    active: true,
+};
+
+let result = pool.insert(user).await?;
+println!("Number of inserted records: {}", result);
+
+// Update using extension method
+let user_update = UserUpdate {
+    id: 1,
+    name: "John Doe (Updated)".to_string(),
+    email: "john.updated@example.com".to_string(),
+    active: true,
+};
+
+let rows_affected = pool.update(user_update).await?;
+println!("Number of updated records: {}", rows_affected);
+
+// Get record using extension method
+let query = UserById { id: 1, ..Default::default() };
+let user = pool.get(&query).await?;
+println!("User: {:?}", user);
+
+// Get multiple records using extension method
+let active_query = UsersByActive { active: true, ..Default::default() };
+let active_users = pool.get_all(&active_query).await?;
+println!("Number of active users: {}", active_users.len());
+
+// Delete using extension method
+let user_delete = UserDelete { id: 1 };
+let deleted_count = pool.delete(user_delete).await?;
+println!("Number of deleted records: {}", deleted_count);
+```
+
+## Transaction Operations
+
+You can use two different approaches to perform transaction operations:
+
+1. Using extension methods (directly on the Transaction object)
+2. Using transaction helper functions
+
+### Using Transaction Extension Methods
+
+To use extension methods that work directly on the Transaction object, import the `TransactionOps` trait:
+
+```rust
+use parsql_deadpool_postgres::{CrudOps, TransactionOps};
+use tokio_postgres::NoTls;
+use deadpool_postgres::{Config, Runtime};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cfg = Config::new();
+    cfg.host = Some("localhost".to_string());
+    cfg.dbname = Some("test".to_string());
+    
+    let pool = cfg.create_pool(Some(Runtime::Tokio1), NoTls)?;
+    let client = pool.get().await?;
+    
+    // Start a transaction
+    let tx = client.transaction().await?;
+    
+    // Insert using extension method within transaction
+    let user = UserInsert {
+        name: "John Doe".to_string(),
+        email: "john@example.com".to_string(),
+        active: true,
+    };
+    let result = tx.insert(user).await?;
+    
+    // Update using extension method within transaction
+    let user_update = UserUpdate {
+        id: 1,
+        name: "John Doe (Updated)".to_string(),
+        email: "john.updated@example.com".to_string(),
+        active: true,
+    };
+    let rows_affected = tx.update(user_update).await?;
+    
+    // Commit if successful
+    tx.commit().await?;
+    
+    Ok(())
+}
+```
+
+The following extension methods are available on the Transaction object:
+- `tx.insert(entity)` - Inserts a record
+- `tx.update(entity)` - Updates a record
+- `tx.delete(entity)` - Deletes a record
+- `tx.get(params)` - Retrieves a single record
+- `tx.get_all(params)` - Retrieves multiple records
+- `tx.select(entity, to_model)` - Retrieves a single record with a custom transformer function
+- `tx.select_all(entity, to_model)` - Retrieves multiple records with a custom transformer function
+
+### Using Transaction Helper Functions
+
+To use transaction helper functions, import the `transactional` module:
+
+```rust
+use parsql_deadpool_postgres::transactional::{begin, tx_insert, tx_update};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cfg = Config::new();
+    cfg.host = Some("localhost".to_string());
+    cfg.dbname = Some("test".to_string());
+    
+    let pool = cfg.create_pool(Some(Runtime::Tokio1), NoTls)?;
+    let mut client = pool.get().await?;
+    
+    // Start a transaction
+    let tx = begin(&mut client).await?;
+    
+    // Insert within transaction
+    let user = UserInsert {
+        name: "John Doe".to_string(),
+        email: "john@example.com".to_string(),
+        active: true,
+    };
+    let (tx, result) = tx_insert(tx, user).await?;
+    
+    // Update within transaction
+    let user_update = UserUpdate {
+        id: 1,
+        name: "John Doe (Updated)".to_string(),
+        email: "john.updated@example.com".to_string(),
+        active: true,
+    };
+    let (tx, rows_affected) = tx_update(tx, user_update).await?;
+    
+    // Commit if successful
+    tx.commit().await?;
+    
+    Ok(())
+}
+```
+
+Transaction helper functions include:
+- `begin(client)` - Starts a new transaction
+- `tx_insert(tx, entity)` - Inserts a record within a transaction
+- `tx_update(tx, entity)` - Updates a record within a transaction
+- `tx_delete(tx, entity)` - Deletes a record within a transaction
+- `tx_get(tx, params)` - Retrieves a single record within a transaction
+- `tx_get_all(tx, params)` - Retrieves multiple records within a transaction
+- `tx_select(tx, entity, to_model)` - Retrieves a single record with a custom transformer function within a transaction
+- `tx_select_all(tx, entity, to_model)` - Retrieves multiple records with a custom transformer function within a transaction
+
+## Custom Row Transformations
+
+You can transform query results into a different structure using both functions and extension methods:
+
+#### Custom Transformation with Function
 
 ```rust
 use parsql_deadpool_postgres::select_all;
@@ -219,19 +387,19 @@ let summaries = select_all(&pool, query, |row: &Row| UserSummary {
 }).await?;
 ```
 
-### Transaction Operations
+#### Custom Transformation with Extension Method
 
 ```rust
-// Perform operations with transaction
-let client = pool.get().await?;
-let tx = client.transaction().await?;
+use parsql_deadpool_postgres::CrudOps;
+use tokio_postgres::Row;
 
-// Operations...
-let user = UserInsert { ... };
-let (tx, result) = parsql_deadpool_postgres::transactional::tx_insert(tx, user).await?;
-
-// Commit the transaction
-tx.commit().await?;
+// Custom transformation using extension method
+let query = UsersByActive { active: true, ..Default::default() };
+let summaries = pool.select_all(query, |row: &Row| UserSummary {
+    id: row.get("id"),
+    full_name: row.get("name"),
+}).await?;
+println!("Number of summaries: {}", summaries.len());
 ```
 
 ## Example Project

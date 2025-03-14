@@ -47,6 +47,10 @@ pub use transactional_ops as transactional;
 // CRUD işlemleri için modül
 mod crud_ops;
 
+// Pool extension işlemleri için modül
+pub mod pool_extensions;
+pub mod transaction_extensions;
+
 // CRUD işlemlerini dışa aktar
 pub use crud_ops::{
     insert,
@@ -57,6 +61,10 @@ pub use crud_ops::{
     select,
     select_all
 };
+
+// Pool extension'ları dışa aktar
+pub use pool_extensions::CrudOps;
+pub use transaction_extensions::TransactionOps;
 
 // Deadpool-postgres türlerini dışa aktar
 pub use deadpool_postgres::{Pool, Client as PoolClient, PoolError, Transaction};
