@@ -52,23 +52,23 @@ Add to your Cargo.toml file as follows:
 
 ```toml
 [dependencies]
-parsql = "0.3.5"
+parsql = "0.3.6"
 ```
 
 and select the feature you need:
 
 ```toml
 # For SQLite
-parsql = { version = "0.3.5", features = ["sqlite"] }
+parsql = { version = "0.3.6", features = ["sqlite"] }
 
 # For PostgreSQL
-parsql = { version = "0.3.5", features = ["postgres"] }
+parsql = { version = "0.3.6", features = ["postgres"] }
 
 # For Tokio PostgreSQL
-parsql = { version = "0.3.5", features = ["tokio-postgres"] }
+parsql = { version = "0.3.6", features = ["tokio-postgres"] }
 
 # For Deadpool PostgreSQL
-parsql = { version = "0.3.5", features = ["deadpool-postgres"] }
+parsql = { version = "0.3.6", features = ["deadpool-postgres"] }
 ```
 
 ## Core Features
