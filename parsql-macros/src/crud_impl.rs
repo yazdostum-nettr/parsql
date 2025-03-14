@@ -2,6 +2,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use regex::Regex;
 use syn::{parse_macro_input, Data, DeriveInput, Fields};
+use std::env;
 
 /// Extracts field names from a WHERE clause.
 /// 
@@ -94,6 +95,63 @@ mod query_builder {
     }
 }
 
+/// SQL sorgularındaki parametre sayılarını takip etmek için yardımcı veri yapısı.
+/// Bu yapı sayesinde, generate edilen SQL ile SQL parametreleri her zaman senkronize olur.
+pub(crate) struct SqlParamCounter {
+    /// Şu anki parametre numarası (1'den başlar)
+    current: usize,
+}
+
+impl SqlParamCounter {
+    /// 1'den başlayan yeni bir sayaç oluşturur
+    pub fn new() -> Self {
+        Self { current: 1 }
+    }
+    
+    /// Mevcut parametre numarasını döndürür ve sayacı bir artırır
+    pub fn next(&mut self) -> usize {
+        let current = self.current;
+        self.current += 1;
+        current
+    }
+    
+    /// Mevcut parametre numarasını döndürür (artırmadan)
+    pub fn current(&self) -> usize {
+        self.current
+    }
+    
+    /// Toplam parametre sayısını döndürür (current - 1)
+    pub fn count(&self) -> usize {
+        self.current - 1
+    }
+}
+
+/// WHERE koşulundaki parametre numaralarını doğru şekilde atayan yardımcı fonksiyon.
+/// Bu fonksiyon, bağımsız olarak kullanılabilir ve sayaç değerini dışarıdan alır.
+pub(crate) fn number_where_clause_params(clause: &str, counter: &mut SqlParamCounter) -> String {
+    clause.chars()
+        .map(|c| {
+            if c == '$' {
+                // $ işaretinden sonra numara ekle
+                let param_num = counter.next();
+                format!("${}", param_num)
+            } else {
+                // Diğer karakterleri olduğu gibi bırak
+                c.to_string()
+            }
+        })
+        .collect::<String>()
+}
+
+/// Log mesajlarını yazdırmak için yardımcı fonksiyon
+fn log_message(message: &str) {
+    if let Ok(trace) = env::var("PARSQL_TRACE") {
+        if trace == "1" {
+            println!("{}", message);
+        }
+    }
+}
+
 /// Implements the Updateable derive macro.
 pub(crate) fn derive_updateable_impl(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -157,25 +215,19 @@ pub(crate) fn derive_updateable_impl(input: TokenStream) -> TokenStream {
         .cloned()
         .collect();
 
-    // Adjust the where_clause based on the number of updated columns
-    let mut count = sorted_fields.len() + 1;
+    // SQL parametrelerinin numaralandırması için SqlParamCounter kullanıyoruz
+    let mut param_counter = SqlParamCounter::new();
+    
+    // SET deyiminde kullanılan parametreler sayacı başlatır (1, 2, ...)
+    // Her update edilen alan için bir parametre kullanılır
+    for _ in 0..sorted_fields.len() {
+        param_counter.next();
+    }
+    
+    // Parametre sayacı update alanlarından sonra devam eder
+    // WHERE cümlesindeki parametreler SET parametrelerinden sonraki değerleri alır
     let adjusted_where_clause = where_clause
-        .map(|clause| {
-            clause.chars()
-                .enumerate()
-                .map(|(_, c)| {
-                    if c == '$' {
-                        // Add a number after the $ character
-                        let new_char = format!("${}", count);
-                        count += 1;
-                        new_char
-                    } else {
-                        // Keep other characters as is
-                        c.to_string()
-                    }
-                })
-                .collect::<String>()
-        })
+        .map(|clause| number_where_clause_params(&clause, &mut param_counter))
         .unwrap_or_else(|| "".to_string());
 
     let mut builder = query_builder::SafeQueryBuilder::new();
@@ -204,6 +256,10 @@ pub(crate) fn derive_updateable_impl(input: TokenStream) -> TokenStream {
     }
 
     let safe_query = builder.build();
+    
+    // Log mesajlarını PARSQL_TRACE kontrolü ile yazdır
+    log_message(&format!("Generated UPDATE SQL: {}", safe_query));
+    log_message(&format!("Total param count: {}", param_counter.count()));
 
     let expanded = quote! {
         impl SqlQuery for #struct_name {
@@ -332,25 +388,13 @@ pub fn derive_queryable_impl(input: TokenStream) -> TokenStream {
 
     let tables = table.to_string();
 
-    let mut count = 1;
+    // SQL parametrelerinin numaralandırması için SqlParamCounter kullanıyoruz
+    // Bu sayede tüm parametreler her zaman 1'den başlayacak ve tutarlı şekilde artacak
+    let mut param_counter = SqlParamCounter::new();
 
+    // WHERE cümlesini numaralandır
     let adjusted_where_clause = where_clause
-        .map(|clause| {
-            clause.chars()
-                .enumerate()
-                .map(|(_, c)| {
-                    if c == '$' {
-                        // Add a number after the $ character
-                        let new_char = format!("${}", count);
-                        count += 1;
-                        new_char
-                    } else {
-                        // Keep other characters as is
-                        c.to_string()
-                    }
-                })
-                .collect::<String>()
-        })
+        .map(|clause| number_where_clause_params(&clause, &mut param_counter))
         .unwrap_or_else(|| "".to_string());
 
     // Get the optional select attribute
@@ -395,6 +439,13 @@ pub fn derive_queryable_impl(input: TokenStream) -> TokenStream {
                 .value()
         });
 
+    // HAVING cümlesi para counter'ın mevcut değerinden devam eder
+    // Böylece WHERE cümlesindeki son parametreden sonraki parametreler kullanılır
+    let adjusted_having_clause = having
+        .as_ref()
+        .map(|clause| number_where_clause_params(clause, &mut param_counter))
+        .unwrap_or_else(|| "".to_string());
+
     // Get the optional order_by attribute
     let order_by = input
         .attrs
@@ -429,10 +480,10 @@ pub fn derive_queryable_impl(input: TokenStream) -> TokenStream {
         builder.add_raw(&group_by_clause);
     }
 
-    // Add HAVING clause
-    if let Some(having_clause) = having {
+    // HAVING cümlesi
+    if let Some(_) = having {
         builder.add_keyword("HAVING");
-        builder.add_raw(&having_clause);
+        builder.add_raw(&adjusted_having_clause);
     }
 
     // Add ORDER BY clause
@@ -441,7 +492,45 @@ pub fn derive_queryable_impl(input: TokenStream) -> TokenStream {
         builder.add_raw(&order_by_clause);
     }
 
+    // Add LIMIT clause
+    let limit = input
+        .attrs
+        .iter()
+        .find(|attr| attr.path().is_ident("limit"))
+        .map(|attr| {
+            attr.parse_args::<syn::LitInt>()
+                .expect("Expected an integer literal for limit")
+                .base10_parse::<u64>()
+                .expect("Failed to parse limit value as an integer")
+        });
+
+    if let Some(limit_value) = limit {
+        builder.add_keyword("LIMIT");
+        builder.add_raw(&limit_value.to_string());
+    }
+
+    // Add OFFSET clause
+    let offset = input
+        .attrs
+        .iter()
+        .find(|attr| attr.path().is_ident("offset"))
+        .map(|attr| {
+            attr.parse_args::<syn::LitInt>()
+                .expect("Expected an integer literal for offset")
+                .base10_parse::<u64>()
+                .expect("Failed to parse offset value as an integer")
+        });
+
+    if let Some(offset_value) = offset {
+        builder.add_keyword("OFFSET");
+        builder.add_raw(&offset_value.to_string());
+    }
+
     let safe_query = builder.build();
+
+    // Log mesajlarını PARSQL_TRACE kontrolü ile yazdır
+    log_message(&format!("Generated SQL Query: {}", safe_query));
+    log_message(&format!("Total param count: {}", param_counter.count()));
 
     let expanded = quote! {
         impl SqlQuery for #struct_name {
@@ -478,22 +567,12 @@ pub(crate) fn derive_deletable_impl(input: TokenStream) -> TokenStream {
                 .value()
         });
 
-    let mut count = 1;
+    // SQL parametrelerinin numaralandırması için SqlParamCounter kullanıyoruz
+    // Her zaman 1'den başlar
+    let mut param_counter = SqlParamCounter::new();
+    
     let adjusted_where_clause = where_clause
-        .map(|clause| {
-            clause.chars()
-                .enumerate()
-                .map(|(_, c)| {
-                    if c == '$' {
-                        let new_char = format!("${}", count);
-                        count += 1;
-                        new_char
-                    } else {
-                        c.to_string()
-                    }
-                })
-                .collect::<String>()
-        })
+        .map(|clause| number_where_clause_params(&clause, &mut param_counter))
         .unwrap_or_else(|| "".to_string());
 
     let mut builder = query_builder::SafeQueryBuilder::new();
@@ -504,6 +583,10 @@ pub(crate) fn derive_deletable_impl(input: TokenStream) -> TokenStream {
     builder.add_raw(&adjusted_where_clause);  // SafeQueryBuilder will automatically add spaces
 
     let safe_query = builder.build();
+    
+    // Log mesajlarını PARSQL_TRACE kontrolü ile yazdır
+    log_message(&format!("Generated DELETE SQL: {}", safe_query));
+    log_message(&format!("Total param count: {}", param_counter.count()));
 
     let expanded = quote! {
         impl SqlQuery for #struct_name {
@@ -531,6 +614,17 @@ pub(crate) fn derive_sql_params_impl(input: TokenStream) -> TokenStream {
                 .value()
         });
 
+    // HAVING cümlesi için de parametreleri kontrol et
+    let having_clause = input
+        .attrs
+        .iter()
+        .find(|attr| attr.path().is_ident("having"))
+        .map(|attr| {
+            attr.parse_args::<syn::LitStr>()
+                .expect("Expected a string literal for having")
+                .value()
+        });
+
     let fields = if let Data::Struct(data) = &input.data {
         if let Fields::Named(fields) = &data.fields {
             fields
@@ -545,18 +639,38 @@ pub(crate) fn derive_sql_params_impl(input: TokenStream) -> TokenStream {
         panic!("SqlParams can only be derived for structs");
     };
 
-    // where_clause varsa filtrele, yoksa tüm alanları kullan
-    let field_names: Vec<_> = match &where_clause {
-        Some(clause) => fields
+    // where_clause ve having_clause'daki parametreleri belirle
+    let mut param_fields = Vec::new();
+    
+    // WHERE cümlesindeki alan adlarını bulma
+    if let Some(clause) = &where_clause {
+        let where_fields: Vec<_> = fields
             .iter()
             .filter(|&f| clause.contains(f))
-            .map(|f| syn::Ident::new(f, struct_name.span()))
-            .collect(),
-        None => fields
+            .cloned()
+            .collect();
+        param_fields.extend(where_fields);
+    }
+    
+    // HAVING cümlesindeki alan adlarını bulma
+    if let Some(clause) = &having_clause {
+        let having_fields: Vec<_> = fields
             .iter()
-            .map(|f| syn::Ident::new(f, struct_name.span()))
-            .collect(),
-    };
+            .filter(|&f| clause.contains(f))
+            .cloned()
+            .collect();
+        param_fields.extend(having_fields);
+    }
+    
+    // Eğer hiçbir cümlede parametre yoksa, tüm alanları kullan
+    if param_fields.is_empty() {
+        param_fields = fields;
+    }
+
+    let field_names: Vec<_> = param_fields
+        .iter()
+        .map(|f| syn::Ident::new(f, struct_name.span()))
+        .collect();
 
     let expanded = quote! {
         impl SqlParams for #struct_name {
