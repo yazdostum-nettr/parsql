@@ -9,6 +9,7 @@ Parsql için Deadpool PostgreSQL entegrasyon küfesidir. Bu paket, parsql'in dea
 - Otomatik SQL sorgu oluşturma
 - Güvenli parametre yönetimi
 - Generic CRUD işlemleri (get, insert, update, delete)
+- Pool nesnesi için extension method'lar (doğrudan pool üzerinden CRUD işlemleri)
 - Veritabanı satırlarını struct'lara dönüştürme
 - Özel satır dönüşümleri
 - SQL Injection saldırılarına karşı otomatik koruma
@@ -139,7 +140,14 @@ struct UserDelete {
 }
 ```
 
-### CRUD İşlemleri
+## CRUD İşlemleri
+
+CRUD işlemlerini gerçekleştirmek için iki farklı yaklaşım kullanabilirsiniz:
+
+1. Fonksiyon çağrıları ile
+2. Extension method'lar ile (doğrudan Pool nesnesi üzerinden)
+
+### Fonksiyon Çağrıları ile Kullanım
 
 #### Veri Ekleme
 
@@ -168,8 +176,8 @@ let user = UserUpdate {
     active: true,
 };
 
-let success = update(&pool, user).await?;
-println!("Güncelleme başarılı: {}", success);
+let rows_affected = update(&pool, user).await?;
+println!("Güncellenen kayıt sayısı: {}", rows_affected);
 ```
 
 #### Veri Sorgulama
@@ -196,43 +204,163 @@ let deleted_count = delete(&pool, user_delete).await?;
 println!("Silinen kayıt sayısı: {}", deleted_count);
 ```
 
-### Özel Satır Dönüşümleri
+### Extension Method'lar ile Kullanım
 
-Sorgu sonuçlarını farklı bir yapıya dönüştürmek için:
+Pool nesnesi üzerinde doğrudan çalışan extension method'ları kullanmak için `CrudOps` trait'ini içe aktarın:
 
 ```rust
-use parsql_deadpool_postgres::select_all;
-use tokio_postgres::Row;
+use parsql_deadpool_postgres::CrudOps;
 
-// Özet veri modeli
-struct UserSummary {
-    id: i32,
-    full_name: String,
+// Extension method kullanarak ekleme
+let user = UserInsert {
+    name: "Ahmet Yılmaz".to_string(),
+    email: "ahmet@example.com".to_string(),
+    active: true,
+};
+
+let result = pool.insert(user).await?;
+println!("Eklenen kayıt sayısı: {}", result);
+
+// Extension method kullanarak güncelleme
+let user_update = UserUpdate {
+    id: 1,
+    name: "Ahmet Yılmaz (Güncellendi)".to_string(),
+    email: "ahmet.updated@example.com".to_string(),
+    active: true,
+};
+
+let rows_affected = pool.update(user_update).await?;
+println!("Güncellenen kayıt sayısı: {}", rows_affected);
+
+// Extension method kullanarak kayıt getirme
+let query = UserById { id: 1, ..Default::default() };
+let user = pool.get(&query).await?;
+println!("Kullanıcı: {:?}", user);
+
+// Extension method kullanarak birden fazla kayıt getirme
+let active_query = UsersByActive { active: true, ..Default::default() };
+let active_users = pool.get_all(&active_query).await?;
+println!("Aktif kullanıcı sayısı: {}", active_users.len());
+
+// Extension method kullanarak silme
+let user_delete = UserDelete { id: 1 };
+let deleted_count = pool.delete(user_delete).await?;
+println!("Silinen kayıt sayısı: {}", deleted_count);
+```
+
+## Transaction İşlemleri
+
+Transaction işlemlerini gerçekleştirmek için iki farklı yaklaşım kullanabilirsiniz:
+
+1. Extension method'lar ile (doğrudan Transaction nesnesi üzerinden)
+2. Transaction helper fonksiyonları ile
+
+### Transaction Extension Method'ları ile Kullanım
+
+Transaction nesnesi üzerinde doğrudan çalışan extension method'ları kullanmak için `TransactionOps` trait'ini içe aktarın:
+
+```rust
+use parsql_deadpool_postgres::{CrudOps, TransactionOps};
+use tokio_postgres::NoTls;
+use deadpool_postgres::{Config, Runtime};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cfg = Config::new();
+    cfg.host = Some("localhost".to_string());
+    cfg.dbname = Some("test".to_string());
+    
+    let pool = cfg.create_pool(Some(Runtime::Tokio1), NoTls)?;
+    let client = pool.get().await?;
+    
+    // Transaction başlatma
+    let tx = client.transaction().await?;
+    
+    // Transaction içinde extension method kullanarak ekleme
+    let user = UserInsert {
+        name: "Ahmet Yılmaz".to_string(),
+        email: "ahmet@example.com".to_string(),
+        active: true,
+    };
+    let result = tx.insert(user).await?;
+    
+    // Transaction içinde extension method kullanarak güncelleme
+    let user_update = UserUpdate {
+        id: 1,
+        name: "Ahmet Yılmaz (Güncellendi)".to_string(),
+        email: "ahmet.updated@example.com".to_string(),
+        active: true,
+    };
+    let rows_affected = tx.update(user_update).await?;
+    
+    // İşlem başarılı olursa commit
+    tx.commit().await?;
+    
+    Ok(())
 }
-
-// Özel dönüşüm fonksiyonu ile sorgulama
-let query = UsersByActive { active: true, ..Default::default() };
-
-let summaries = select_all(&pool, query, |row: &Row| UserSummary {
-    id: row.get("id"),
-    full_name: row.get("name"),
-}).await?;
 ```
 
-### Transaction İşlemleri
+Transaction nesnesi üzerinde şu extension methodlar kullanılabilir:
+- `tx.insert(entity)` - Kayıt ekler
+- `tx.update(entity)` - Kayıt günceller
+- `tx.delete(entity)` - Kayıt siler
+- `tx.get(params)` - Tek bir kayıt getirir
+- `tx.get_all(params)` - Birden fazla kayıt getirir
+- `tx.select(entity, to_model)` - Özel dönüştürücü fonksiyon ile tek kayıt getirir
+- `tx.select_all(entity, to_model)` - Özel dönüştürücü fonksiyon ile çoklu kayıt getirir
+
+### Transaction Helper Fonksiyonları ile Kullanım
+
+Transaction helper fonksiyonlarını kullanmak için `transactional` modülünü içe aktarın:
 
 ```rust
-// Transaction ile işlemler yapma
-let client = pool.get().await?;
-let tx = client.transaction().await?;
+use parsql_deadpool_postgres::transactional::{begin, tx_insert, tx_update};
 
-// İşlemler...
-let user = UserInsert { ... };
-let (tx, result) = parsql_deadpool_postgres::transactional::tx_insert(tx, user).await?;
-
-// Transaction'ı commit etme
-tx.commit().await?;
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cfg = Config::new();
+    cfg.host = Some("localhost".to_string());
+    cfg.dbname = Some("test".to_string());
+    
+    let pool = cfg.create_pool(Some(Runtime::Tokio1), NoTls)?;
+    let mut client = pool.get().await?;
+    
+    // Transaction başlatma
+    let tx = begin(&mut client).await?;
+    
+    // Transaction içinde ekleme
+    let user = UserInsert {
+        name: "Ahmet Yılmaz".to_string(),
+        email: "ahmet@example.com".to_string(),
+        active: true,
+    };
+    let (tx, result) = tx_insert(tx, user).await?;
+    
+    // Transaction içinde güncelleme
+    let user_update = UserUpdate {
+        id: 1,
+        name: "Ahmet Yılmaz (Güncellendi)".to_string(),
+        email: "ahmet.updated@example.com".to_string(),
+        active: true,
+    };
+    let (tx, rows_affected) = tx_update(tx, user_update).await?;
+    
+    // İşlem başarılı olursa commit
+    tx.commit().await?;
+    
+    Ok(())
+}
 ```
+
+Transaction helper fonksiyonları şunları içerir:
+- `begin(client)` - Yeni bir transaction başlatır
+- `tx_insert(tx, entity)` - Transaction içinde kayıt ekler
+- `tx_update(tx, entity)` - Transaction içinde kayıt günceller
+- `tx_delete(tx, entity)` - Transaction içinde kayıt siler
+- `tx_get(tx, params)` - Transaction içinde tek bir kayıt getirir
+- `tx_get_all(tx, params)` - Transaction içinde birden fazla kayıt getirir
+- `tx_select(tx, entity, to_model)` - Transaction içinde özel dönüştürücü fonksiyon ile tek kayıt getirir
+- `tx_select_all(tx, entity, to_model)` - Transaction içinde özel dönüştürücü fonksiyon ile çoklu kayıt getirir
 
 ## Örnek Proje
 
