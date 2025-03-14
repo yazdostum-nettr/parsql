@@ -3,7 +3,7 @@ mod models;
 mod repository;
 
 use crate::config::DatabaseConfig;
-use crate::models::UserInsert;
+use crate::models::{UserInsert, UserUpdate, UserDelete, UserById, UsersByState, UserStatusQuery};
 use crate::repository::UserRepository;
 use dotenv::dotenv;
 use parsql_deadpool_postgres::Error;
@@ -21,14 +21,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .as_secs();
     
     // Veritabanı tablolarını oluşturmak için SQL
+    const DROP_TABLE_SQL: &str = "DROP TABLE IF EXISTS users";
     const CREATE_TABLE_SQL: &str = r#"
-    CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        email VARCHAR(100) NOT NULL UNIQUE,
-        active BOOLEAN NOT NULL DEFAULT TRUE,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMPTZ
+    CREATE TABLE users (
+        id BIGSERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        state SMALLINT NOT NULL
     )
     "#;
     
@@ -44,8 +43,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Veritabanı tablosunu oluştur
     let client = pool.get().await.expect("Havuzdan client alınamadı");
+    // Önce tabloyu temizle
+    client.execute(DROP_TABLE_SQL, &[]).await?;
+    println!("Varsa mevcut tablo silindi");
+    // Sonra yeni tabloyu oluştur
     client.execute(CREATE_TABLE_SQL, &[]).await?;
-    println!("Veritabanı tablosu oluşturuldu (veya zaten var)");
+    println!("Veritabanı tablosu oluşturuldu");
     
     // Tabloyu temizle
     client.execute(TRUNCATE_TABLE_SQL, &[]).await?;
@@ -68,21 +71,21 @@ async fn demo_crud_operations(repo: &UserRepository, timestamp: u64) -> Result<(
     println!("\n1. Kullanıcı Ekleme");
     let new_user = UserInsert::new(
         "Mehmet Yılmaz", 
-        &format!("mehmet.yilmaz-{}@example.com", timestamp)
+        &format!("mehmet.yilmaz-{}@example.com", timestamp),
+        1 // Aktif kullanıcı (state=1)
     );
     let user_id = repo.insert_user(new_user).await?;
-    println!("Kullanıcı eklendi, etkilenen satır sayısı: {}", user_id);
+    println!("Kullanıcı eklendi, ID: {}", user_id);
     
     // 2. Kullanıcı güncelleme
     println!("\n2. Kullanıcı Güncelleme");
-    let user = repo.get_users_by_active(true).await?;
+    let user = repo.get_users_by_state(1).await?;
     if let Some(first_user) = user.first() {
         let user_id = first_user.id;
         let update_user = models::UserUpdate::new(
             user_id,
             "Mehmet Yılmaz (Güncellendi)",
-            &format!("mehmet.updated-{}@example.com", timestamp),
-            true,
+            &format!("mehmet.updated-{}@example.com", timestamp)
         );
         let updated = repo.update_user(update_user).await?;
         println!("Kullanıcı güncellendi: {}", updated);
@@ -94,26 +97,27 @@ async fn demo_crud_operations(repo: &UserRepository, timestamp: u64) -> Result<(
         println!("Güncellenecek kullanıcı bulunamadı");
     }
     
-    // 3. Özel dönüşüm ile kullanıcıları getirme
-    println!("\n3. Özel Dönüşüm ile Kullanıcıları Getirme");
-    let summaries = repo.get_users_with_custom_transform(true).await?;
-    println!("Aktif kullanıcı özetleri:");
-    for summary in &summaries {
-        println!("  - {}", summary);
+    // 3. Özel sorgu ile kullanıcıları getirme (durum bilgisi ile)
+    println!("\n3. Özel Sorgu ile Kullanıcıları Getirme");
+    let users = repo.get_users_with_status(1).await?;
+    println!("Kullanıcı durumları:");
+    for user in &users {
+        println!("  - {}", user);
     }
     
     // 4. Transaction ile kullanıcı ekleme
     println!("\n4. Transaction ile Kullanıcı Ekleme");
     let tx_user = UserInsert::new(
         "Ali Veli", 
-        &format!("ali.veli-{}@example.com", timestamp)
+        &format!("ali.veli-{}@example.com", timestamp),
+        1 // Aktif kullanıcı (state=1)
     );
     let tx_result = repo.create_user_with_transaction(tx_user).await?;
     println!("Transaction ile kullanıcı eklendi, kullanıcı ID: {}", tx_result);
     
     // 5. Tüm aktif kullanıcıları listeleme
     println!("\n5. Tüm Aktif Kullanıcıları Listeleme");
-    let all_active = repo.get_users_by_active(true).await?;
+    let all_active = repo.get_users_by_state(1).await?;
     println!("Toplam {} aktif kullanıcı bulundu:", all_active.len());
     for user in &all_active {
         println!("  - ID: {}, Ad: {}, E-posta: {}", user.id, user.name, user.email);

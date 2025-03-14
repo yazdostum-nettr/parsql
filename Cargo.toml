@@ -15,7 +15,7 @@ members = [ "examples/postgres",
 authors = ["Mehmet Burak Muştu"]
 description = "Deneyimsel bir sql yardımcı küfesidir."
 edition = "2021"
-categories = ["database", "asynchronous", "synchronous"]
+categories = ["database", "asynchronous"]
 keywords = ["database", "async", "postgres", "sqlite"]
 repository = "https://github.com/yazdostum-nettr/parsql"
 version = "0.3.3"
@@ -51,14 +51,14 @@ parsql-macros = { path = "parsql-macros", version = "0.3.3" }
 parsql-sqlite = { path = "parsql-sqlite", version = "0.3.3" }
 parsql-postgres = { path = "parsql-postgres", version = "0.3.3" }
 parsql-tokio-postgres = { path = "parsql-tokio-postgres", version = "0.3.3" }
-parsql-deadpool-postgres = { path = "parsql-deadpool-postgres" }
+parsql-deadpool-postgres = { path = "parsql-deadpool-postgres", version = "0.3.3" }
 
 [dependencies]
 parsql-macros = { workspace = true, version = "0.3.3" }
 parsql-sqlite = { workspace = true, version = "0.3.3", optional = true }
 parsql-postgres = { workspace = true, version = "0.3.3", optional = true }
 parsql-tokio-postgres = { workspace = true, version = "0.3.3", optional = true }
-parsql-deadpool-postgres = { workspace = true, optional = true }
+parsql-deadpool-postgres = { workspace = true, version = "0.3.3", optional = true }
 
 [workspace.lints.clippy]
 cast_possible_truncation = 'deny'

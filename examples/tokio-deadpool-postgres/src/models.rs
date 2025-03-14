@@ -10,21 +10,18 @@ use tokio_postgres::{types::ToSql, Row, Error};
 pub struct UserInsert {
     pub name: String,
     pub email: String,
-    pub active: bool,
-    pub created_at: Option<DateTime<Utc>>,
+    pub state: i16,
 }
 
 // Kullanıcı güncelleme modeli
 #[derive(Debug, Clone, Serialize, Deserialize, Updateable, DeriveUpdateParams)]
 #[table("users")]
-#[update("name, email, active, updated_at")]
+#[update("name, email")]
 #[where_clause("id = $")]
 pub struct UserUpdate {
-    pub id: i32,
+    pub id: i64,
     pub name: String,
     pub email: String,
-    pub active: bool,
-    pub updated_at: Option<DateTime<Utc>>,
 }
 
 // Kullanıcı silme modeli
@@ -32,93 +29,99 @@ pub struct UserUpdate {
 #[table("users")]
 #[where_clause("id = $")]
 pub struct UserDelete {
-    pub id: i32,
+    pub id: i64,
 }
 
 // ID'ye göre kullanıcı getirme modeli
 #[derive(Debug, Clone, Serialize, Deserialize, Queryable, DeriveFromRow, DeriveSqlParams)]
 #[table("users")]
-#[select("id, name, email, active, created_at, updated_at")]
+#[select("id, name, email, state")]
 #[where_clause("id = $")]
 pub struct UserById {
-    pub id: i32,
+    pub id: i64,
     pub name: String,
     pub email: String, 
-    pub active: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub state: i16,
 }
 
-// Aktiflik durumuna göre kullanıcıları getirme modeli
+// State'e göre kullanıcıları getirme modeli
 #[derive(Debug, Clone, Serialize, Deserialize, Queryable, DeriveFromRow, DeriveSqlParams)]
 #[table("users")]
-#[select("id, name, email, active, created_at, updated_at")]
-#[where_clause("active = $")]
-pub struct UsersByActive {
-    pub id: i32,
+#[select("id, name, email, state")]
+#[where_clause("state = $")]
+#[order_by("name ASC")]
+pub struct UsersByState {
+    pub id: i64,
     pub name: String,
     pub email: String,
-    pub active: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub state: i16,
+}
+
+// Özel sorgu için model
+#[derive(Queryable, DeriveSqlParams)]
+#[table("users")]
+#[select("id, name, email, CASE WHEN state = 1 THEN 'Aktif' ELSE 'Pasif' END as status")]
+#[where_clause("state = $")]
+pub struct UserStatusQuery {
+    pub state: i16,
 }
 
 // Kullanıcı ekleme modeli için yardımcı metotlar
 impl UserInsert {
-    pub fn new(name: &str, email: &str) -> Self {
+    pub fn new(name: &str, email: &str, state: i16) -> Self {
         Self {
             name: name.to_string(),
             email: email.to_string(),
-            active: true,
-            created_at: Some(Utc::now()),
+            state,
         }
     }
 }
 
 // Kullanıcı güncelleme modeli için yardımcı metotlar
 impl UserUpdate {
-    pub fn new(id: i32, name: &str, email: &str, active: bool) -> Self {
+    pub fn new(id: i64, name: &str, email: &str) -> Self {
         Self {
             id,
             name: name.to_string(),
             email: email.to_string(),
-            active,
-            updated_at: Some(Utc::now()),
         }
     }
 }
 
 // Kullanıcı silme modeli için yardımcı metotlar
 impl UserDelete {
-    pub fn new(id: i32) -> Self {
+    pub fn new(id: i64) -> Self {
         Self { id }
     }
 }
 
 // ID'ye göre kullanıcı getirme modeli için yardımcı metotlar
 impl UserById {
-    pub fn new(id: i32) -> Self {
+    pub fn new(id: i64) -> Self {
         Self {
             id,
             name: String::new(),
             email: String::new(),
-            active: false,
-            created_at: Utc::now(),
-            updated_at: None,
+            state: 0,
         }
     }
 }
 
-// Aktiflik durumuna göre kullanıcıları getirme modeli için yardımcı metotlar
-impl UsersByActive {
-    pub fn new(active: bool) -> Self {
+// State'e göre kullanıcıları getirme modeli için yardımcı metotlar
+impl UsersByState {
+    pub fn new(state: i16) -> Self {
         Self {
             id: 0,
             name: String::new(),
             email: String::new(),
-            active,
-            created_at: Utc::now(),
-            updated_at: None,
+            state,
         }
+    }
+}
+
+// Özel sorgu için yardımcı metotlar
+impl UserStatusQuery {
+    pub fn new(state: i16) -> Self {
+        Self { state }
     }
 } 

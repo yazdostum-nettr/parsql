@@ -1,4 +1,5 @@
 use tokio_postgres::{Error, Row, Client, Transaction};
+use std::sync::OnceLock;
 use crate::crud_ops::CrudOps;
 use crate::{SqlQuery, SqlParams, UpdateParams, FromRow};
 
@@ -69,13 +70,21 @@ pub async fn begin(client: &mut Client) -> Result<Transaction<'_>, Error> {
 /// # Ok(())
 /// # }
 /// ```
-pub async fn tx_insert<T: SqlQuery + SqlParams>(
+pub async fn tx_insert<T>(
     transaction: Transaction<'_>,
     entity: T,
-) -> Result<(Transaction<'_>, u64), Error> {
+) -> Result<(Transaction<'_>, u64), Error>
+where
+    T: SqlQuery + SqlParams + Send + Sync + 'static
+{
     let sql = T::query();
     
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+    static TRACE_ENABLED: OnceLock<bool> = OnceLock::new();
+    let is_trace_enabled = *TRACE_ENABLED.get_or_init(|| {
+        std::env::var("PARSQL_TRACE").unwrap_or_default() == "1"
+    });
+    
+    if is_trace_enabled {
         println!("[PARSQL-TOKIO-POSTGRES-TX] Execute SQL: {}", sql);
     }
 
@@ -124,13 +133,21 @@ pub async fn tx_insert<T: SqlQuery + SqlParams>(
 /// # Ok(())
 /// # }
 /// ```
-pub async fn tx_update<T: SqlQuery + UpdateParams>(
+pub async fn tx_update<T>(
     transaction: Transaction<'_>,
     entity: T,
-) -> Result<(Transaction<'_>, bool), Error> {
+) -> Result<(Transaction<'_>, bool), Error>
+where
+    T: SqlQuery + UpdateParams + Send + Sync + 'static
+{
     let sql = T::query();
     
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+    static TRACE_ENABLED: OnceLock<bool> = OnceLock::new();
+    let is_trace_enabled = *TRACE_ENABLED.get_or_init(|| {
+        std::env::var("PARSQL_TRACE").unwrap_or_default() == "1"
+    });
+    
+    if is_trace_enabled {
         println!("[PARSQL-TOKIO-POSTGRES-TX] Execute SQL: {}", sql);
     }
 
@@ -172,13 +189,21 @@ pub async fn tx_update<T: SqlQuery + UpdateParams>(
 /// # Ok(())
 /// # }
 /// ```
-pub async fn tx_delete<T: SqlQuery + SqlParams>(
+pub async fn tx_delete<T>(
     transaction: Transaction<'_>,
     entity: T,
-) -> Result<(Transaction<'_>, u64), Error> {
+) -> Result<(Transaction<'_>, u64), Error>
+where
+    T: SqlQuery + SqlParams + Send + Sync + 'static
+{
     let sql = T::query();
     
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+    static TRACE_ENABLED: OnceLock<bool> = OnceLock::new();
+    let is_trace_enabled = *TRACE_ENABLED.get_or_init(|| {
+        std::env::var("PARSQL_TRACE").unwrap_or_default() == "1"
+    });
+    
+    if is_trace_enabled {
         println!("[PARSQL-TOKIO-POSTGRES-TX] Execute SQL: {}", sql);
     }
 
@@ -226,13 +251,21 @@ pub async fn tx_delete<T: SqlQuery + SqlParams>(
 /// # Ok(())
 /// # }
 /// ```
-pub async fn tx_get<T: SqlQuery + FromRow + SqlParams>(
+pub async fn tx_get<T>(
     transaction: Transaction<'_>,
     params: T,
-) -> Result<(Transaction<'_>, T), Error> {
+) -> Result<(Transaction<'_>, T), Error>
+where
+    T: SqlQuery + FromRow + SqlParams + Send + Sync + 'static
+{
     let sql = T::query();
     
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+    static TRACE_ENABLED: OnceLock<bool> = OnceLock::new();
+    let is_trace_enabled = *TRACE_ENABLED.get_or_init(|| {
+        std::env::var("PARSQL_TRACE").unwrap_or_default() == "1"
+    });
+    
+    if is_trace_enabled {
         println!("[PARSQL-TOKIO-POSTGRES-TX] Execute SQL: {}", sql);
     }
 
@@ -283,13 +316,21 @@ pub async fn tx_get<T: SqlQuery + FromRow + SqlParams>(
 /// # Ok(())
 /// # }
 /// ```
-pub async fn tx_get_all<T: SqlQuery + FromRow + SqlParams>(
+pub async fn tx_get_all<T>(
     transaction: Transaction<'_>,
     params: T,
-) -> Result<(Transaction<'_>, Vec<T>), Error> {
+) -> Result<(Transaction<'_>, Vec<T>), Error>
+where
+    T: SqlQuery + FromRow + SqlParams + Send + Sync + 'static
+{
     let sql = T::query();
     
-    if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+    static TRACE_ENABLED: OnceLock<bool> = OnceLock::new();
+    let is_trace_enabled = *TRACE_ENABLED.get_or_init(|| {
+        std::env::var("PARSQL_TRACE").unwrap_or_default() == "1"
+    });
+    
+    if is_trace_enabled {
         println!("[PARSQL-TOKIO-POSTGRES-TX] Execute SQL: {}", sql);
     }
 
@@ -302,7 +343,7 @@ pub async fn tx_get_all<T: SqlQuery + FromRow + SqlParams>(
     }
     
     Ok((transaction, results))
-} 
+}
 
 /// Implementation of the CrudOps trait for Transactions
 ///
@@ -342,10 +383,20 @@ pub async fn tx_get_all<T: SqlQuery + FromRow + SqlParams>(
 /// # Ok(())
 /// # }
 /// ```
+#[async_trait::async_trait]
 impl<'a> CrudOps for Transaction<'a> {
-    async fn insert<T: SqlQuery + SqlParams>(&self, entity: T) -> Result<u64, Error> {
+    async fn insert<T>(&self, entity: T) -> Result<u64, Error>
+    where
+        T: SqlQuery + SqlParams + Send + Sync + 'static,
+    {
         let sql = T::query();
-        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+        
+        static TRACE_ENABLED: OnceLock<bool> = OnceLock::new();
+        let is_trace_enabled = *TRACE_ENABLED.get_or_init(|| {
+            std::env::var("PARSQL_TRACE").unwrap_or_default() == "1"
+        });
+        
+        if is_trace_enabled {
             println!("[PARSQL-TOKIO-POSTGRES-TX] Execute SQL: {}", sql);
         }
 
@@ -353,9 +404,18 @@ impl<'a> CrudOps for Transaction<'a> {
         self.execute(&sql, &params).await
     }
 
-    async fn update<T: SqlQuery + UpdateParams>(&self, entity: T) -> Result<bool, Error> {
+    async fn update<T>(&self, entity: T) -> Result<bool, Error>
+    where
+        T: SqlQuery + UpdateParams + Send + Sync + 'static,
+    {
         let sql = T::query();
-        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+        
+        static TRACE_ENABLED: OnceLock<bool> = OnceLock::new();
+        let is_trace_enabled = *TRACE_ENABLED.get_or_init(|| {
+            std::env::var("PARSQL_TRACE").unwrap_or_default() == "1"
+        });
+        
+        if is_trace_enabled {
             println!("[PARSQL-TOKIO-POSTGRES-TX] Execute SQL: {}", sql);
         }
 
@@ -364,9 +424,18 @@ impl<'a> CrudOps for Transaction<'a> {
         Ok(result > 0)
     }
 
-    async fn delete<T: SqlQuery + SqlParams>(&self, entity: T) -> Result<u64, Error> {
+    async fn delete<T>(&self, entity: T) -> Result<u64, Error>
+    where
+        T: SqlQuery + SqlParams + Send + Sync + 'static,
+    {
         let sql = T::query();
-        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+        
+        static TRACE_ENABLED: OnceLock<bool> = OnceLock::new();
+        let is_trace_enabled = *TRACE_ENABLED.get_or_init(|| {
+            std::env::var("PARSQL_TRACE").unwrap_or_default() == "1"
+        });
+        
+        if is_trace_enabled {
             println!("[PARSQL-TOKIO-POSTGRES-TX] Execute SQL: {}", sql);
         }
 
@@ -374,9 +443,18 @@ impl<'a> CrudOps for Transaction<'a> {
         self.execute(&sql, &params).await
     }
 
-    async fn get<T: SqlQuery + FromRow + SqlParams>(&self, params: T) -> Result<T, Error> {
+    async fn get<T>(&self, params: T) -> Result<T, Error>
+    where
+        T: SqlQuery + FromRow + SqlParams + Send + Sync + 'static,
+    {
         let sql = T::query();
-        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+        
+        static TRACE_ENABLED: OnceLock<bool> = OnceLock::new();
+        let is_trace_enabled = *TRACE_ENABLED.get_or_init(|| {
+            std::env::var("PARSQL_TRACE").unwrap_or_default() == "1"
+        });
+        
+        if is_trace_enabled {
             println!("[PARSQL-TOKIO-POSTGRES-TX] Execute SQL: {}", sql);
         }
 
@@ -385,9 +463,18 @@ impl<'a> CrudOps for Transaction<'a> {
         T::from_row(&row)
     }
 
-    async fn get_all<T: SqlQuery + FromRow + SqlParams>(&self, params: T) -> Result<Vec<T>, Error> {
+    async fn get_all<T>(&self, params: T) -> Result<Vec<T>, Error>
+    where
+        T: SqlQuery + FromRow + SqlParams + Send + Sync + 'static,
+    {
         let sql = T::query();
-        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+        
+        static TRACE_ENABLED: OnceLock<bool> = OnceLock::new();
+        let is_trace_enabled = *TRACE_ENABLED.get_or_init(|| {
+            std::env::var("PARSQL_TRACE").unwrap_or_default() == "1"
+        });
+        
+        if is_trace_enabled {
             println!("[PARSQL-TOKIO-POSTGRES-TX] Execute SQL: {}", sql);
         }
 
@@ -402,12 +489,20 @@ impl<'a> CrudOps for Transaction<'a> {
         Ok(results)
     }
 
-    async fn select<T: SqlQuery + SqlParams, F, R>(&self, entity: T, to_model: F) -> Result<R, Error>
+    async fn select<T, F, R>(&self, entity: T, to_model: F) -> Result<R, Error>
     where
-        F: Fn(&Row) -> Result<R, Error>,
+        T: SqlQuery + SqlParams + Send + Sync + 'static,
+        F: Fn(&Row) -> Result<R, Error> + Send + Sync + 'static,
+        R: Send + 'static,
     {
         let sql = T::query();
-        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+        
+        static TRACE_ENABLED: OnceLock<bool> = OnceLock::new();
+        let is_trace_enabled = *TRACE_ENABLED.get_or_init(|| {
+            std::env::var("PARSQL_TRACE").unwrap_or_default() == "1"
+        });
+        
+        if is_trace_enabled {
             println!("[PARSQL-TOKIO-POSTGRES-TX] Execute SQL: {}", sql);
         }
 
@@ -416,12 +511,20 @@ impl<'a> CrudOps for Transaction<'a> {
         to_model(&row)
     }
 
-    async fn select_all<T: SqlQuery + SqlParams, F, R>(&self, entity: T, to_model: F) -> Result<Vec<R>, Error>
+    async fn select_all<T, F, R>(&self, entity: T, to_model: F) -> Result<Vec<R>, Error>
     where
-        F: Fn(&Row) -> R,
+        T: SqlQuery + SqlParams + Send + Sync + 'static,
+        F: Fn(&Row) -> R + Send + Sync + 'static,
+        R: Send + 'static,
     {
         let sql = T::query();
-        if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+        
+        static TRACE_ENABLED: OnceLock<bool> = OnceLock::new();
+        let is_trace_enabled = *TRACE_ENABLED.get_or_init(|| {
+            std::env::var("PARSQL_TRACE").unwrap_or_default() == "1"
+        });
+        
+        if is_trace_enabled {
             println!("[PARSQL-TOKIO-POSTGRES-TX] Execute SQL: {}", sql);
         }
 

@@ -127,8 +127,8 @@ pub async fn seed_example_data_if_empty(client: &Client) -> Result<(), Error> {
         client.execute(
             "INSERT INTO users (name, email, state) VALUES 
              ('Ali Yılmaz', 'ali.yilmaz@example.com', 1),
-             ('Ayşe Kaya', 'ayse.kaya@example.com', 1),
-             ('Mehmet Demir', 'mehmet.demir@example.com', 0)",
+             ('Veli Er', 'veli.er@example.com', 1),
+             ('Yalçın Akbulut', 'yalcin.akbulut@example.com', 0)",
             &[],
         ).await?;
         

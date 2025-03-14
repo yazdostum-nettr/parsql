@@ -155,16 +155,16 @@ pub mod transaction_ops;
 // Re-export tokio-postgres types that might be needed
 pub use tokio_postgres::{types::ToSql, Row, Error, Client};
 
-// Re-export crud operations from crud_ops:
-pub use crud_ops::{
-    insert, 
-    select, 
-    select_all, 
-    update, 
-    delete, 
-    get, 
-    get_all,
+// Re-export crud operations
+pub use crate::crud_ops::{
     CrudOps,
+    insert,
+    update,
+    delete,
+    get,
+    get_all,
+    select,
+    select_all
 };
 
 pub use parsql_macros as macros;

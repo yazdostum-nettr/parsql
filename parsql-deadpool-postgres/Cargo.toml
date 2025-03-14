@@ -10,11 +10,15 @@ version.workspace = true
 license.workspace = true
 
 [dependencies]
-parsql-macros = { path = "../parsql-macros", features = ["deadpool-postgres"] }
+# parsql-macros = { path = "../parsql-macros", features = ["deadpool-postgres"] }
 postgres = { version = "0.19.10" }
 tokio-postgres = { version = "0.7.13" }
 deadpool-postgres = { version = "0.14.1" }
-async-trait = "0.1.77"
+async-trait = "0.1.87"
+
+[dependencies.parsql-macros]
+workspace = true
+features = ["deadpool-postgres"]
 
 [lints]
 workspace = true
