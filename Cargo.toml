@@ -18,12 +18,12 @@ edition = "2021"
 categories = ["database", "asynchronous"]
 keywords = ["database", "async", "postgres", "sqlite"]
 repository = "https://github.com/yazdostum-nettr/parsql"
-version = "0.3.3"
+version = "0.3.4"
 license = "MIT OR Apache-2.0"
 
 [package]
 name = "parsql"
-version = "0.3.3"
+version = "0.3.4"
 description = "Deneyimsel bir sql yardımcı küfesidir. UYARI: bu bir ORM aracı değildir. Amaç sql yazımı ve kullanımında basit cümlecikler için kolaylık sağlamaktır."
 license.workspace = true
 edition.workspace = true
