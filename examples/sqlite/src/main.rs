@@ -1,82 +1,19 @@
-use parsql::{
-    macros::{FromRow, Insertable, Queryable, SqlParams, UpdateParams, Updateable, Deletable},
-    sqlite::{get, insert, update, delete, FromRow, SqlParams, UpdateParams, SqlQuery},
-};
-use rusqlite::{types::ToSql, Connection, Row, Result, Error};
+use parsql::sqlite::{get, insert, update, delete, get_all};
+use rusqlite::{Connection, Result, Error};
 
-#[derive(Insertable, SqlParams)]
-#[table("users")]
-pub struct InsertUser {
-    pub name: String,
-    pub email: String,
-    pub state: i16,
-}
+// Modülleri import et
+mod models;
+mod pagination_sample;
 
-#[derive(Updateable, UpdateParams)]
-#[table("users")]
-#[update("name, email")]
-#[where_clause("id = $")]
-pub struct UpdateUser {
-    pub id: i64,
-    pub name: String,
-    pub email: String,
-    pub state: i16,
-}
-
-#[derive(Queryable, FromRow, SqlParams, Debug)]
-#[table("users")]
-#[where_clause("id = $")]
-pub struct GetUser {
-    pub id: i64,
-    pub name: String,
-    pub email: String,
-    pub state: i16,
-}
-
-#[derive(Queryable, FromRow, SqlParams, Debug)]
-#[table("users")]
-#[where_clause("name = $")]
-pub struct GetUserByName {
-    pub id: i64,
-    pub name: String,
-    pub email: String,
-    pub state: i16,
-}
-
-#[derive(Queryable, FromRow, SqlParams, Debug)]
-#[table("users")]
-#[select("users.state, posts.state as post_state, COUNT(posts.id) as post_count, AVG(CAST(posts.id as REAL)) as avg_post_id")]
-#[join("LEFT JOIN posts ON users.id = posts.user_id")]
-#[where_clause("users.state > $")]
-#[group_by("users.state, posts.state")]
-#[having("COUNT(posts.id) > 0 AND AVG(CAST(posts.id as REAL)) > 2")]
-#[order_by("post_count DESC")]
-pub struct UserPostStatsAdvanced {
-    pub state: i16,
-    pub post_state: Option<i16>,
-    pub post_count: i64,
-    pub avg_post_id: Option<f32>,
-}
-
-impl UserPostStatsAdvanced {
-    pub fn new(min_state: i16) -> Self {
-        Self {
-            state: min_state,
-            post_state: None,
-            post_count: 0,
-            avg_post_id: None,
-        }
-    }
-}
-
-#[derive(Deletable, SqlParams)]
-#[table("users")]
-#[where_clause("id = $")]
-pub struct DeleteUser {
-    pub id: i64,
-}
+// Modüllerden yapıları import et
+use models::user::{InsertUser, UpdateUser, GetUser, GetUserByName, DeleteUser};
+use models::stats::UserPostStatsAdvanced;
+use pagination_sample::{run_pagination_examples, run_derive_pagination_examples};
 
 fn main() {
+    // PARSQL_TRACE çevre değişkenini ayarla
+    std::env::set_var("PARSQL_TRACE", "1");
+    
     let conn = Connection::open("sqlite_db.db3").unwrap();
 
     // Tabloları oluştur ve örnek veriler ekle
@@ -127,6 +64,27 @@ fn main() {
             (1, 'Another comment on admin post 1', 1),
             (2, 'Comment on admin post 2', 1),
             (3, 'Comment on User1 post', 1);
+            
+        -- Sayfalama örnekleri için daha fazla test verisi
+        INSERT INTO users (name, email, state) VALUES 
+            ('user3', 'user3@example.com', 1),
+            ('user4', 'user4@example.com', 1),
+            ('user5', 'user5@example.com', 2),
+            ('user6', 'user6@example.com', 1),
+            ('user7', 'user7@example.com', 1),
+            ('user8', 'user8@example.com', 2),
+            ('user9', 'user9@example.com', 1),
+            ('user10', 'user10@example.com', 1),
+            ('user11', 'user11@example.com', 2),
+            ('user12', 'user12@example.com', 1),
+            ('user13', 'user13@example.com', 1),
+            ('user14', 'user14@example.com', 2),
+            ('user15', 'user15@example.com', 1),
+            ('user16', 'user16@example.com', 1),
+            ('user17', 'user17@example.com', 2),
+            ('user18', 'user18@example.com', 1),
+            ('user19', 'user19@example.com', 1),
+            ('user20', 'user20@example.com', 2);
     ").expect("Tablo oluşturma işlemi başarısız oldu!");
 
     let insert_usert = InsertUser {
@@ -155,7 +113,7 @@ fn main() {
         state: Default::default(),
     };
 
-    let get_user_result = get(&conn, get_user);
+    let get_user_result = get(&conn, &get_user);
 
     println!("get user result: {:?}", get_user_result);
 
@@ -169,7 +127,7 @@ fn main() {
         state: 0,
     };
 
-    match get(&conn, get_user) {
+    match get(&conn, &get_user) {
         Ok(user) => println!("Bulunan kullanıcı: {:?}", user),
         Err(e) => println!("Hata: {}", e),
     }
@@ -182,7 +140,7 @@ fn main() {
         state: 0,
     };
 
-    match get(&conn, get_user) {
+    match get(&conn, &get_user) {
         Ok(user) => println!("Bulunan kullanıcı: {:?}", user),
         Err(e) => println!("Hata: {}", e),
     }
@@ -190,7 +148,7 @@ fn main() {
     // UserPostStatsAdvanced örneği
     let stats_query = UserPostStatsAdvanced::new(0);
     
-    match get(&conn, stats_query) {
+    match get(&conn, &stats_query) {
         Ok(stats) => println!("Gelişmiş kullanıcı-gönderi istatistikleri: {:?}", stats),
         Err(e) => println!("İstatistik sorgulama hatası: {}", e),
     }
@@ -198,31 +156,15 @@ fn main() {
     // Tüm istatistikleri getirme örneği
     println!("\nTüm gelişmiş kullanıcı-gönderi istatistikleri:");
     
-    // let query = UserPostStatsAdvanced::new(0);
-    // let sql = query.to_sql_query();
-    
-    // let mut stmt = conn.prepare(&sql).unwrap();
-    // let params = query.to_params();
-    
-    // let rows = stmt.query_map(params.as_slice(), |row| {
-    //     Ok(UserPostStatsAdvanced {
-    //         state: row.get(0)?,
-    //         post_state: row.get(1)?,
-    //         post_count: row.get(2)?,
-    //         avg_post_id: row.get(3)?,
-    //     })
-    // }).unwrap();
-    
-    // for row in rows {
-    //     match row {
-    //         Ok(stats) => println!("  {:?}", stats),
-    //         Err(e) => println!("  Satır okuma hatası: {}", e),
-    //     }
-    // }
-
     // DELETE işlemi (doğrudan SQL sorgusu ile)
     let user_id_to_delete = 3;
     let delete_user = DeleteUser { id: user_id_to_delete };
     let deleted_rows = delete(&conn, delete_user);  
     println!("Silinen satır sayısı: {:?}", deleted_rows);
+
+    // 5. Sayfalama Örnekleri
+    run_pagination_examples(&conn).expect("Manuel sayfalama örnekleri başarısız oldu");
+
+    // 6. Derive Macro ile Sayfalama Örnekleri
+    run_derive_pagination_examples(&conn).expect("Derive macro ile sayfalama örnekleri başarısız oldu");
 }

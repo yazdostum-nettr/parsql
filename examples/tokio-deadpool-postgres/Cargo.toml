@@ -1,0 +1,22 @@
+[package]
+name = "tokio-deadpool-postgres"
+authors.workspace = true
+description.workspace = true
+edition.workspace = true
+categories.workspace = true
+keywords.workspace = true
+repository.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+parsql-deadpool-postgres = { path = "../../parsql-deadpool-postgres" }
+tokio = { version = "1.41.1", features = ["full"] }
+deadpool-postgres = { version = "0.14.1", features = ["rt_tokio_1"]}
+tokio-postgres = { version = "0.7.13", features = ["with-chrono-0_4"] }
+chrono = { version = "0.4.35", features = ["serde"] }
+dotenv = "0.15.0"
+serde = { version = "1.0.196", features = ["derive"] } 
+
+[lints]
+workspace = true

@@ -9,6 +9,14 @@ Parsql için procedural makroları barındıran küfedir. Bu paket, SQL sorgu ol
 - Birden fazla veritabanı sistemi için destek (PostgreSQL, SQLite)
 - Tip güvenliği olan veritabanı işlemleri
 - SQL Injection saldırılarına karşı otomatik koruma
+- `Queryable` türetme özniteliği, tablo adı, where ifadesi, select ifadesi, group by, having, order by, limit ve offset ifadeleri için destek sağlar.
+- **Yeni:** Sayfalama (pagination) için tam destek: `limit` ve `offset` öznitelikleri ile verimli sayfalama yapabilirsiniz.
+- `Insertable` türetme özniteliği, tabloya özgü INSERT ifadeleri oluşturur.
+- `Updateable` türetme özniteliği, tabloya özgü UPDATE ifadeleri oluşturur.
+- `Deletable` türetme özniteliği, tabloya özgü DELETE ifadeleri oluşturur.
+- `SqlParams` türetme özniteliği, yapının SQL parametreleri için kullanılmasını sağlar.
+- `UpdateParams` türetme özniteliği, yapının UPDATE ifadeleri için kullanılmasını sağlar.
+- `FromRow` türetme özniteliği, veritabanı satırlarının yapıya dönüştürülmesini sağlar.
 
 ## Makrolar
 
@@ -132,6 +140,48 @@ pub struct DeleteUser {
 - `#[group_by("alan1")]` - GROUP BY ifadesini belirtir
 - `#[order_by("alan1 DESC")]` - ORDER BY ifadesini belirtir
 - `#[having("COUNT(*) > 5")]` - HAVING ifadesini belirtir
+- `#[limit(10)]` - Sorgu sonucunda döndürülecek maksimum kayıt sayısını belirtir
+- `#[offset(20)]` - Sorgu sonucunun kaç kayıt atlanarak başlayacağını belirtir
+
+## Sayfalama Desteği
+
+0.3.2 sürümünden itibaren, parsql-macros sayfalama (pagination) işlemleri için güçlü destek sunmaktadır:
+
+- `#[limit(N)]` - Her sayfada kaç kayıt görüntüleneceğini belirler
+- `#[offset(N)]` - Kaçıncı kayıttan itibaren başlanacağını belirler
+- SQLite ve PostgreSQL veritabanları için tam destek
+
+### Sayfalama Örneği
+
+```rust
+// İlk sayfa için sorgu yapısı
+#[derive(Debug, Queryable, SqlParams, FromRow)]
+#[table("users")]
+#[where_clause("state >= $")]
+#[order_by("id ASC")]
+#[limit(10)]       // Her sayfada 10 kayıt
+#[offset(0)]       // İlk sayfa (0. indeks)
+pub struct PageOne {
+    pub id: i32,
+    pub name: String,
+    pub email: String,
+    pub state: i16,
+}
+
+// İkinci sayfa için sorgu yapısı
+#[derive(Debug, Queryable, SqlParams, FromRow)]
+#[table("users")]
+#[where_clause("state >= $")]
+#[order_by("id ASC")]
+#[limit(10)]       // Her sayfada 10 kayıt
+#[offset(10)]      // İkinci sayfa (10. kayıttan başla)
+pub struct PageTwo {
+    pub id: i32,
+    pub name: String,
+    pub email: String,
+    pub state: i16,
+}
+```
 
 ## Parametre İşaretleme
 

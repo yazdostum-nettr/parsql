@@ -1,4 +1,4 @@
-use parsql::tokio_postgres::{delete, SqlParams, SqlQuery};
+use parsql::{macros::{Deletable, SqlParams}, tokio_postgres::{delete, SqlParams, SqlQuery}};
 use tokio_postgres::{Client, types::ToSql};
 
 /// # DeleteUser
@@ -21,31 +21,9 @@ use tokio_postgres::{Client, types::ToSql};
 /// let delete_user = DeleteUser { id: 1 };
 /// let result = delete(&client, delete_user).await;
 /// ```
-#[derive(Debug)]
+#[derive(Deletable, Debug, SqlParams)]
+#[table("users")]
+#[where_clause("id = $")]
 pub struct DeleteUser {
     pub id: i32,
-}
-
-impl SqlQuery for DeleteUser {
-    fn query() -> String {
-        "DELETE FROM users WHERE id = $1".to_string()
-    }
-}
-
-impl SqlParams for DeleteUser {
-    fn params(&self) -> Vec<&(dyn ToSql + Sync)> {
-        vec![&self.id]
-    }
-}
-
-/// Demonstrates how to delete a user from the database.
-pub async fn delete_sample(client: &Client) {
-    // Create a user to delete
-    let delete_user = DeleteUser { id: 1 };
-
-    // Delete the user
-    match delete(client, delete_user).await {
-        Ok(count) => println!("Deleted {} user(s)", count),
-        Err(e) => eprintln!("Error deleting user: {}", e),
-    }
 }

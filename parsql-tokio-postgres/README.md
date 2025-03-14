@@ -11,6 +11,9 @@ Parsql için Tokio PostgreSQL entegrasyon küfesidir. Bu paket, parsql'in tokio-
 - Veritabanı satırlarını struct'lara dönüştürme
 - Deadpool bağlantı havuzu desteği
 - SQL Injection saldırılarına karşı otomatik koruma
+- Detaylı hata raporlama
+- Yüksek performanslı asenkron sorgu yürütme
+- Extension metotları (CrudOps trait)
 
 ## Güvenlik Özellikleri
 
@@ -65,11 +68,11 @@ veya doğrudan bu paketi kullanmak isterseniz:
 [dependencies]
 parsql-tokio-postgres = "0.3.2"
 parsql-macros = "0.3.2"
-tokio-postgres = "0.7"
-tokio = { version = "1", features = ["full"] }
+tokio-postgres = "0.7.13"
+tokio = { version = "1.41.1", features = ["full"] }
 
 # Deadpool kullanmak isterseniz
-deadpool-postgres = "0.10"
+deadpool-postgres = "0.14.1"
 ```
 
 ## Temel Kullanım
@@ -144,13 +147,67 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## CRUD İşlemleri
 
+Veritabanı işlemlerini gerçekleştirmek için iki yaklaşım sunulmaktadır:
+
+1. Fonksiyon tabanlı yaklaşım (`get`, `insert`, `update`, vb.)
+2. Extension metot yaklaşımı (`client.get()`, `client.insert()`, vb.) - `CrudOps` trait
+
+### Extension Metot Yaklaşımı (CrudOps Trait)
+
+```rust
+use parsql::{
+    macros::{Queryable, FromRow, SqlParams},
+    tokio_postgres::{CrudOps},
+};
+
+#[derive(Queryable, FromRow, SqlParams, Debug)]
+#[table("users")]
+#[where_clause("id = $")]
+pub struct GetUser {
+    pub id: i64,
+    pub name: String,
+    pub email: String,
+}
+
+impl GetUser {
+    pub fn new(id: i64) -> Self {
+        Self {
+            id,
+            name: Default::default(),
+            email: Default::default(),
+        }
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let (client, connection) = tokio_postgres::connect(
+        "host=localhost user=postgres password=postgres dbname=test",
+        NoTls,
+    ).await?;
+    
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("Bağlantı hatası: {}", e);
+        }
+    });
+    
+    // Extension metot kullanımı
+    let get_user = GetUser::new(1);
+    let user = client.get(get_user).await?;
+    
+    println!("Kullanıcı: {:?}", user);
+    Ok(())
+}
+```
+
 ### Veri Okuma (Get) İşlemi
 
 ```rust
 use parsql::{
     core::Queryable,
     macros::{FromRow, Queryable, SqlParams},
-    tokio_postgres::{FromRow, SqlParams, get},
+    tokio_postgres::{FromRow, SqlParams, get, CrudOps},
 };
 use tokio_postgres::{types::ToSql, Row};
 
@@ -188,9 +245,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
     
-    // Kullanımı
+    // Kullanımı (fonksiyon yaklaşımı)
     let get_user = GetUser::new(1);
     let get_result = get(&client, get_user).await?;
+    
+    // veya (extension metot yaklaşımı)
+    let get_user = GetUser::new(1);
+    let get_result = client.get(get_user).await?;
     
     println!("Kullanıcı: {:?}", get_result);
     Ok(())
@@ -203,11 +264,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 use parsql::{
     core::Insertable,
     macros::{Insertable, SqlParams},
-    tokio_postgres::{SqlParams, insert},
+    tokio_postgres::{SqlParams, insert, CrudOps},
 };
 use tokio_postgres::types::ToSql;
 
-#[derive(Insertable)]
+#[derive(Insertable, SqlParams)]
 #[table("users")]
 pub struct InsertUser {
     pub name: String,
@@ -234,7 +295,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         state: 1,
     };
     
+    // Fonksiyon yaklaşımı
     let insert_result = insert(&client, insert_user).await?;
+    
+    // veya extension metot yaklaşımı
+    let insert_user = InsertUser {
+        name: "Mehmet".to_string(),
+        email: "mehmet@parsql.com".to_string(),
+        state: 1,
+    };
+    let insert_result = client.insert(insert_user).await?;
+    
     println!("Eklenen kayıt ID: {}", insert_result);
     
     Ok(())
@@ -247,9 +318,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 use parsql::{
     core::Updateable,
     macros::{UpdateParams, Updateable},
-    tokio_postgres::{UpdateParams, update},
+    tokio_postgres::{UpdateParams, update, CrudOps},
 };
-use tokio_postgres::types::ToSql;
 
 #[derive(Updateable, UpdateParams)]
 #[table("users")]
@@ -259,7 +329,6 @@ pub struct UpdateUser {
     pub id: i64,
     pub name: String,
     pub email: String,
-    pub state: i16,
 }
 
 #[tokio::main]
@@ -277,13 +346,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let update_user = UpdateUser {
         id: 1,
-        name: String::from("Ali Güncellendi"),
-        email: String::from("ali.updated@gmail.com"),
-        state: 2,
+        name: "Ali Yılmaz".to_string(),
+        email: "ali.yilmaz@parsql.com".to_string(),
     };
     
-    let result = update(&client, update_user).await?;
-    println!("Güncellenen kayıt sayısı: {}", result);
+    // Fonksiyon yaklaşımı
+    let update_result = update(&client, update_user).await?;
+    
+    // veya extension metot yaklaşımı
+    let update_user = UpdateUser {
+        id: 2,
+        name: "Ayşe Kaya".to_string(),
+        email: "ayse.kaya@parsql.com".to_string(),
+    };
+    let update_result = client.update(update_user).await?;
+    
+    println!("Güncelleme başarılı: {}", update_result);
     
     Ok(())
 }
@@ -295,9 +373,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 use parsql::{
     core::Deletable,
     macros::{Deletable, SqlParams},
-    tokio_postgres::{SqlParams, delete},
+    tokio_postgres::{SqlParams, delete, CrudOps},
 };
-use tokio_postgres::types::ToSql;
 
 #[derive(Deletable, SqlParams)]
 #[table("users")]
@@ -320,114 +397,429 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     
     let delete_user = DeleteUser { id: 1 };
-    let result = delete(&client, delete_user).await?;
     
-    println!("Silinen kayıt sayısı: {}", result);
+    // Fonksiyon yaklaşımı
+    let delete_result = delete(&client, delete_user).await?;
+    
+    // veya extension metot yaklaşımı
+    let delete_user = DeleteUser { id: 2 };
+    let delete_result = client.delete(delete_user).await?;
+    
+    println!("Silinen kayıt sayısı: {}", delete_result);
+    
     Ok(())
 }
 ```
 
-## Deadpool ile Kullanım
+## Özel Sorgular
 
-Deadpool bağlantı havuzu ile parsql kullanmak için öncelikle cargo.toml dosyanızda "deadpool-postgres" özelliğini etkinleştirmeniz gerekiyor. Sonrasında, havuzdan aldığınız istemci üzerinde parsql fonksiyonlarını kullanabilirsiniz.
-
-```rust
-use deadpool_postgres::{Config, Pool};
-use tokio_postgres::NoTls;
-use parsql::tokio_postgres::{get, insert};
-
-// Havuz bağlantısıyla get işlemi
-async fn fetch_user(pool: &Pool, user_id: i64) -> Result<GetUser, Box<dyn std::error::Error>> {
-    let client = pool.get().await?;
-    let get_user = GetUser::new(user_id);
-    let result = get(&client, get_user).await?;
-    Ok(result)
-}
-
-// Havuz bağlantısıyla insert işlemi
-async fn create_user(pool: &Pool, user: InsertUser) -> Result<i64, Box<dyn std::error::Error>> {
-    let client = pool.get().await?;
-    let result = insert(&client, user).await?;
-    Ok(result)
-}
-```
-
-## Gelişmiş Özellikler
-
-### Join Kullanımı
+Bazen standart CRUD işlemleri yetersiz kalabilir. Özel sorguları kolayca çalıştırmak için `select` ve `select_all` işlevleri sağlanmıştır. Bunlar da hem fonksiyon hem de extension metot olarak sunulmaktadır:
 
 ```rust
-#[derive(Queryable, FromRow, SqlParams, Debug)]
+use parsql::{
+    core::Queryable,
+    macros::{Queryable, SqlParams},
+    tokio_postgres::{SqlParams, select, select_all, FromRow, CrudOps},
+};
+use tokio_postgres::Row;
+
+#[derive(Queryable, SqlParams)]
 #[table("users")]
-#[select("users.id, users.name, posts.title as post_title")]
-#[join("LEFT JOIN posts ON users.id = posts.user_id")]
-#[where_clause("users.id = $")]
-pub struct UserWithPosts {
-    pub id: i64,
-    pub name: String,
-    pub post_title: Option<String>,
-}
-```
-
-### Gruplama ve Sıralama
-
-```rust
-#[derive(Queryable, FromRow, SqlParams, Debug)]
-#[table("users")]
-#[select("state, COUNT(*) as user_count")]
-#[group_by("state")]
-#[order_by("user_count DESC")]
-#[having("COUNT(*) > 5")]
-pub struct UserStats {
-    pub state: i16,
-    pub user_count: i64,
-}
-```
-
-### Özel Select İfadeleri
-
-```rust
-#[derive(Queryable, FromRow, SqlParams, Debug)]
-#[table("users")]
-#[select("id, name, email, CASE WHEN state = 1 THEN 'Aktif' ELSE 'Pasif' END as status")]
-#[where_clause("id = $")]
-pub struct UserWithStatus {
+#[select("SELECT u.*, p.role FROM users u JOIN profiles p ON u.id = p.user_id")]
+#[where_clause("u.state = $")]
+pub struct UserWithRole {
     pub id: i64,
     pub name: String,
     pub email: String,
-    pub status: String,
+    pub state: i16,
+    pub role: String,
+}
+
+// FromRow trait'ini manuel olarak uygulama
+impl FromRow for UserWithRole {
+    fn from_row(row: &Row) -> Result<Self, tokio_postgres::Error> {
+        Ok(Self {
+            id: row.try_get("id")?,
+            name: row.try_get("name")?,
+            email: row.try_get("email")?,
+            state: row.try_get("state")?,
+            role: row.try_get("role")?,
+        })
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let (client, connection) = tokio_postgres::connect(
+        "host=localhost user=postgres password=postgres dbname=test",
+        NoTls,
+    ).await?;
+    
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("Bağlantı hatası: {}", e);
+        }
+    });
+    
+    let query = UserWithRole {
+        id: 0,
+        name: String::new(),
+        email: String::new(),
+        state: 1, // Aktif kullanıcılar
+        role: String::new(),
+    };
+    
+    // Fonksiyon yaklaşımı - Tek bir sonuç almak için
+    let user = select(&client, query.clone(), |row| UserWithRole::from_row(row)).await?;
+    
+    // Extension metot yaklaşımı - Tek bir sonuç almak için
+    let user = client.select(query.clone(), |row| UserWithRole::from_row(row)).await?;
+    
+    println!("Kullanıcı: {:?}", user);
+    
+    // Fonksiyon yaklaşımı - Tüm sonuçları almak için
+    let users = select_all(&client, query.clone(), |row| {
+        UserWithRole::from_row(row).unwrap()
+    }).await?;
+    
+    // Extension metot yaklaşımı - Tüm sonuçları almak için
+    let users = client.select_all(query, |row| {
+        UserWithRole::from_row(row).unwrap()
+    }).await?;
+    
+    println!("Kullanıcı sayısı: {}", users.len());
+    
+    Ok(())
 }
 ```
 
-## SQL Sorgularını İzleme
+## Deadpool Bağlantı Havuzu ile Kullanım
 
-Oluşturulan SQL sorgularını görmek için `PARSQL_TRACE` çevre değişkenini ayarlayabilirsiniz:
+Deadpool bağlantı havuzu, çok sayıda eşzamanlı veritabanı işlemi için bağlantıları etkin şekilde yönetmenizi sağlar. Bunu kullanmak için `deadpool-postgres` özelliğini etkinleştirin:
 
-```sh
+```rust
+use parsql::{
+    tokio_postgres::{get, FromRow, SqlParams},
+    macros::{FromRow, Queryable, SqlParams},
+};
+use deadpool_postgres::{Config, Client, Pool};
+use tokio_postgres::NoTls;
+
+#[derive(Queryable, FromRow, SqlParams, Debug)]
+#[table("users")]
+#[where_clause("state = $")]
+pub struct ActiveUsers {
+    pub id: i64,
+    pub name: String,
+    pub email: String,
+    pub state: i16,
+}
+
+impl ActiveUsers {
+    pub fn new() -> Self {
+        Self {
+            id: 0,
+            name: String::new(),
+            email: String::new(),
+            state: 1, // Aktif kullanıcılar
+        }
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Deadpool konfigürasyonu
+    let mut cfg = Config::new();
+    cfg.host = Some("localhost".to_string());
+    cfg.user = Some("postgres".to_string());
+    cfg.password = Some("postgres".to_string());
+    cfg.dbname = Some("test".to_string());
+    
+    // Bağlantı havuzu oluşturma
+    let pool = cfg.create_pool(None, NoTls)?;
+    
+    // Havuzdan bağlantı alma
+    let client: Client = pool.get().await?;
+    
+    // Sorgu oluşturma
+    let query = ActiveUsers::new();
+    
+    // Aktif kullanıcıları getirme
+    let active_users = get(&client, query).await?;
+    println!("Aktif kullanıcı: {:?}", active_users);
+    
+    Ok(())
+}
+```
+
+## Gelişmiş Özellikler ve Optimizasyonlar
+
+### SQL İzleme
+
+Hata ayıklama amacıyla, çalıştırılan SQL sorgularını izlemek için `PARSQL_TRACE` çevre değişkenini kullanabilirsiniz:
+
+```bash
 PARSQL_TRACE=1 cargo run
 ```
 
-Bu, tokio-postgres için oluşturulan tüm sorguları konsola yazdıracaktır.
+Bu, çalıştırılan tüm SQL sorgularını konsola yazdıracaktır.
 
-## Performans İpuçları
+### Makro Seçenekleri
 
-1. **Prepared Statements**: tokio-postgres, sorguları prepared statement olarak çalıştırır ve parsql bu özelliği kullanır, bu SQL enjeksiyonlarına karşı korunmanıza yardımcı olur.
+Makrolar, SQL oluşturmada esneklik sağlamak için çeşitli özellikler sunar:
 
-2. **Bağlantı Havuzu**: Yüksek yüklü uygulamalarda deadpool-postgres kullanımı daha iyi performans sağlar.
-
-3. **Asenkron İşlemler**: tokio-postgres ile işlemlerinizi asenkron olarak çalıştırarak, uygulamanızın daha verimli çalışmasını sağlayabilirsiniz.
-
-## Hata Yakalama
-
-Tokio-postgres işlemleri sırasında oluşabilecek hataları yakalamak ve işlemek için Rust'ın `Result` mekanizmasını kullanın:
+#### Queryable (SELECT)
 
 ```rust
-match get(&client, get_user).await {
-    Ok(user) => println!("Kullanıcı bulundu: {:?}", user),
-    Err(e) => eprintln!("Hata oluştu: {}", e),
+#[derive(Queryable, FromRow, SqlParams)]
+#[table("users")]
+#[select("SELECT * FROM users")] // İsteğe bağlı özel SQL
+#[where_clause("id = $ AND state = $")] // Koşullar
+#[order_by("id DESC")] // Sıralama
+#[limit(10)] // Limit
+#[offset(5)] // Offset
+struct UserQuery {
+    // ...
 }
 ```
 
-## Tam Örnek Proje
+#### Insertable
 
-Tam bir örnek proje için parsql ana deposundaki [examples/tokio-postgres](../examples/tokio-postgres) dizinine bakabilirsiniz.
+```rust
+#[derive(Insertable, SqlParams)]
+#[table("users")]
+#[returning("id")] // INSERT...RETURNING için
+struct NewUser {
+    // ...
+}
+```
+
+#### Updateable
+
+```rust
+#[derive(Updateable, UpdateParams)]
+#[table("users")]
+#[update("name, email")] // Yalnızca belirli alanları güncelle
+#[where_clause("id = $")]
+struct UpdateUser {
+    // ...
+}
+```
+
+## Performans İpuçları
+
+* Sorgu planı ön belleğinden yararlanmak için aynı SQL yapısına sahip sorguları tekrar kullanın
+* Çok sayıda sorgu için bağlantı havuzları kullanın
+* Büyük veri kümeleri için `get_all` yerine sayfalama (limit ve offset) kullanın
+* Filtreleri veritabanı seviyesinde uygulayın, uygulamanızda değil
+
+## Hata Yakalama ve İşleme
+
+```rust
+async fn handle_database() -> Result<(), Box<dyn std::error::Error>> {
+    let (client, connection) = tokio_postgres::connect(
+        "host=localhost user=postgres password=postgres dbname=test",
+        NoTls,
+    ).await?;
+    
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("Bağlantı hatası: {}", e);
+        }
+    });
+    
+    let result = match get(&client, user_query).await {
+        Ok(user) => {
+            println!("Kullanıcı bulundu: {:?}", user);
+            // İşlem başarılı
+            Ok(())
+        },
+        Err(e) => match e.code() {
+            // Belirli PostgreSQL hata kodlarını işleme
+            Some(code) if code == &tokio_postgres::error::SqlState::UNIQUE_VIOLATION => {
+                println!("Benzersizlik ihlali: {}", e);
+                Err(e.into())
+            },
+            Some(code) if code == &tokio_postgres::error::SqlState::FOREIGN_KEY_VIOLATION => {
+                println!("Yabancı anahtar ihlali: {}", e);
+                Err(e.into())
+            },
+            _ => {
+                println!("Genel veritabanı hatası: {}", e);
+                Err(e.into())
+            }
+        },
+    };
+    
+    result
+}
+```
+
+## Lisanslama
+
+Bu kütüphane MIT veya Apache-2.0 lisansı altında lisanslanmıştır.
+
+## Transaction İşlemleri
+
+Transaction işlemleri için iki farklı yaklaşım kullanabilirsiniz:
+
+#### 1. `CrudOps` trait üzerinden Transaction nesnesiyle çalışma
+
+`Transaction` struct'ı için `CrudOps` trait'i implement edilmiştir, bu sayede `Client` nesnesi üzerinde kullanılan extension methodlarını doğrudan `Transaction` nesnesi üzerinde de kullanabilirsiniz:
+
+```rust
+use tokio_postgres::{NoTls, Error};
+use parsql::tokio_postgres::{CrudOps, transactional};
+use parsql::macros::{Insertable, Updateable, SqlParams};
+
+#[derive(Insertable, SqlParams)]
+#[table("users")]
+struct InsertUser {
+    name: String,
+    email: String,
+    state: i16,
+}
+
+#[derive(Updateable, SqlParams)]
+#[table("users")]
+#[where_clause("id = $")]
+struct ActivateUser {
+    id: i64,
+    state: i16,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+    let (mut client, connection) = tokio_postgres::connect(
+        "host=localhost user=postgres dbname=test",
+        NoTls,
+    ).await?;
+    
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("Bağlantı hatası: {}", e);
+        }
+    });
+    
+    // Transaction başlat
+    let transaction = client.transaction().await?;
+    
+    // Kullanıcı ekle - CrudOps trait methodunu kullanarak
+    let user = InsertUser {
+        name: "John".to_string(),
+        email: "john@example.com".to_string(),
+        state: 0, // pasif
+    };
+    
+    // Transaction içinde doğrudan insert işlemi
+    let rows = transaction.insert(user).await?;
+    println!("Eklenen satır sayısı: {}", rows);
+    
+    // Kullanıcıyı aktifleştir - CrudOps trait methodunu kullanarak
+    let activate = ActivateUser {
+        id: 1, // Eklenen kullanıcının ID'si
+        state: 1, // aktif
+    };
+    
+    // Transaction içinde doğrudan update işlemi
+    let updated = transaction.update(activate).await?;
+    println!("Güncelleme başarılı: {}", updated);
+    
+    // Transaction'ı commit et
+    transaction.commit().await?;
+    
+    Ok(())
+}
+```
+
+#### 2. `transactional` modülü ile çalışma
+
+`transactional` modülündeki yardımcı fonksiyonları kullanarak işlemlerinizi gerçekleştirebilirsiniz:
+
+```rust
+use tokio_postgres::{NoTls, Error};
+use parsql::tokio_postgres::transactional;
+use parsql::macros::{Insertable, Updateable, SqlParams};
+
+#[derive(Insertable, SqlParams)]
+#[table("users")]
+struct InsertUser {
+    name: String,
+    email: String,
+    state: i16,
+}
+
+#[derive(Updateable, SqlParams)]
+#[table("users")]
+#[where_clause("id = $")]
+struct ActivateUser {
+    id: i64,
+    state: i16,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+    let (mut client, connection) = tokio_postgres::connect(
+        "host=localhost user=postgres dbname=test",
+        NoTls,
+    ).await?;
+    
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("Bağlantı hatası: {}", e);
+        }
+    });
+    
+    // Transaction başlat
+    let tx = transactional::begin(&mut client).await?;
+    
+    // Kullanıcı ekle
+    let user = InsertUser {
+        name: "John".to_string(),
+        email: "john@example.com".to_string(),
+        state: 0, // pasif
+    };
+    
+    // Transaction içinde insert işlemi
+    let (tx, rows) = transactional::tx_insert(tx, user).await?;
+    println!("Eklenen satır sayısı: {}", rows);
+    
+    // Kullanıcıyı aktifleştir
+    let activate = ActivateUser {
+        id: 1, // Eklenen kullanıcının ID'si
+        state: 1, // aktif
+    };
+    
+    // Transaction içinde update işlemi
+    let (tx, updated) = transactional::tx_update(tx, activate).await?;
+    println!("Güncelleme başarılı: {}", updated);
+    
+    // Transaction'ı commit et
+    tx.commit().await?;
+    
+    Ok(())
+}
+```
+
+### Transaction Helper Fonksiyonları
+
+`transactional` modülü aşağıdaki fonksiyonları sağlar:
+
+- `begin(&mut client)`: Yeni bir transaction başlatır
+- `tx_insert(transaction, entity)`: Transaction içinde insert işlemi yapar ve transaction ile etkilenen satır sayısını döndürür
+- `tx_update(transaction, entity)`: Transaction içinde update işlemi yapar ve transaction ile güncelleme durumunu döndürür
+- `tx_delete(transaction, entity)`: Transaction içinde delete işlemi yapar ve transaction ile silinen satır sayısını döndürür
+- `tx_get(transaction, params)`: Transaction içinde tek bir kayıt getirir ve transaction ile kaydı döndürür
+- `tx_get_all(transaction, params)`: Transaction içinde birden fazla kayıt getirir ve transaction ile kayıtları döndürür
+- `tx_select(transaction, entity, to_model)`: Transaction içinde özel bir sorgu çalıştırır ve belirtilen dönüşüm fonksiyonunu kullanarak sonuçları dönüştürür
+- `tx_select_all(transaction, entity, to_model)`: Transaction içinde özel bir sorgu çalıştırır ve tüm sonuçları belirtilen dönüşüm fonksiyonunu kullanarak dönüştürür
+
+Her fonksiyon, transaction nesnesini geri döndürür, böylece zincirleme işlemler yapabilirsiniz:
+
+```rust
+let tx = transactional::begin(&mut client).await?;
+let (tx, _) = transactional::tx_insert(tx, user1).await?;
+let (tx, _) = transactional::tx_insert(tx, user2).await?;
+let (tx, _) = transactional::tx_update(tx, activate_user).await?;
+tx.commit().await?;
+```

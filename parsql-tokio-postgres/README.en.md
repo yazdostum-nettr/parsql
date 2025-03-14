@@ -11,6 +11,9 @@ Tokio PostgreSQL integration crate for parsql. This package provides asynchronou
 - Conversion of database rows to structs
 - Deadpool connection pool support
 - Automatic protection against SQL Injection attacks
+- Detailed error reporting
+- High-performance asynchronous query execution
+- Extension methods (CrudOps trait)
 
 ## Security Features
 
@@ -65,11 +68,11 @@ or if you want to use this package directly:
 [dependencies]
 parsql-tokio-postgres = "0.3.2"
 parsql-macros = "0.3.2"
-tokio-postgres = "0.7"
-tokio = { version = "1", features = ["full"] }
+tokio-postgres = "0.7.13"
+tokio = { version = "1.41.1", features = ["full"] }
 
 # If you want to use Deadpool
-deadpool-postgres = "0.10"
+deadpool-postgres = "0.14.1"
 ```
 
 ## Basic Usage
@@ -144,13 +147,67 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## CRUD Operations
 
+There are two approaches provided for performing database operations:
+
+1. Function-based approach (`get`, `insert`, `update`, etc.)
+2. Extension method approach (`client.get()`, `client.insert()`, etc.) - `CrudOps` trait
+
+### Extension Method Approach (CrudOps Trait)
+
+```rust
+use parsql::{
+    macros::{Queryable, FromRow, SqlParams},
+    tokio_postgres::{CrudOps},
+};
+
+#[derive(Queryable, FromRow, SqlParams, Debug)]
+#[table("users")]
+#[where_clause("id = $")]
+pub struct GetUser {
+    pub id: i64,
+    pub name: String,
+    pub email: String,
+}
+
+impl GetUser {
+    pub fn new(id: i64) -> Self {
+        Self {
+            id,
+            name: Default::default(),
+            email: Default::default(),
+        }
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let (client, connection) = tokio_postgres::connect(
+        "host=localhost user=postgres password=postgres dbname=test",
+        NoTls,
+    ).await?;
+    
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("Connection error: {}", e);
+        }
+    });
+    
+    // Using extension method
+    let get_user = GetUser::new(1);
+    let user = client.get(get_user).await?;
+    
+    println!("User: {:?}", user);
+    Ok(())
+}
+```
+
 ### Reading Data (Get)
 
 ```rust
 use parsql::{
     core::Queryable,
     macros::{FromRow, Queryable, SqlParams},
-    tokio_postgres::{FromRow, SqlParams, get},
+    tokio_postgres::{FromRow, SqlParams, get, CrudOps},
 };
 use tokio_postgres::{types::ToSql, Row};
 
@@ -188,9 +245,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
     
-    // Usage
+    // Usage (function approach)
     let get_user = GetUser::new(1);
     let get_result = get(&client, get_user).await?;
+    
+    // or (extension method approach)
+    let get_user = GetUser::new(1);
+    let get_result = client.get(get_user).await?;
     
     println!("User: {:?}", get_result);
     Ok(())
@@ -203,11 +264,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 use parsql::{
     core::Insertable,
     macros::{Insertable, SqlParams},
-    tokio_postgres::{SqlParams, insert},
+    tokio_postgres::{SqlParams, insert, CrudOps},
 };
 use tokio_postgres::types::ToSql;
 
-#[derive(Insertable)]
+#[derive(Insertable, SqlParams)]
 #[table("users")]
 pub struct InsertUser {
     pub name: String,
@@ -229,12 +290,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     
     let insert_user = InsertUser {
-        name: "Ali".to_string(),
-        email: "ali@parsql.com".to_string(),
+        name: "John".to_string(),
+        email: "john@parsql.com".to_string(),
         state: 1,
     };
     
+    // Function approach
     let insert_result = insert(&client, insert_user).await?;
+    
+    // or extension method approach
+    let insert_user = InsertUser {
+        name: "Alice".to_string(),
+        email: "alice@parsql.com".to_string(),
+        state: 1,
+    };
+    let insert_result = client.insert(insert_user).await?;
+    
     println!("Inserted record ID: {}", insert_result);
     
     Ok(())
@@ -247,9 +318,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 use parsql::{
     core::Updateable,
     macros::{UpdateParams, Updateable},
-    tokio_postgres::{UpdateParams, update},
+    tokio_postgres::{UpdateParams, update, CrudOps},
 };
-use tokio_postgres::types::ToSql;
 
 #[derive(Updateable, UpdateParams)]
 #[table("users")]
@@ -259,7 +329,6 @@ pub struct UpdateUser {
     pub id: i64,
     pub name: String,
     pub email: String,
-    pub state: i16,
 }
 
 #[tokio::main]
@@ -277,13 +346,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let update_user = UpdateUser {
         id: 1,
-        name: String::from("Ali Updated"),
-        email: String::from("ali.updated@gmail.com"),
-        state: 2,
+        name: "John Smith".to_string(),
+        email: "john.smith@parsql.com".to_string(),
     };
     
-    let result = update(&client, update_user).await?;
-    println!("Number of records updated: {}", result);
+    // Function approach
+    let update_result = update(&client, update_user).await?;
+    
+    // or extension method approach
+    let update_user = UpdateUser {
+        id: 2,
+        name: "Alice Johnson".to_string(),
+        email: "alice.johnson@parsql.com".to_string(),
+    };
+    let update_result = client.update(update_user).await?;
+    
+    println!("Update successful: {}", update_result);
     
     Ok(())
 }
@@ -295,9 +373,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 use parsql::{
     core::Deletable,
     macros::{Deletable, SqlParams},
-    tokio_postgres::{SqlParams, delete},
+    tokio_postgres::{SqlParams, delete, CrudOps},
 };
-use tokio_postgres::types::ToSql;
 
 #[derive(Deletable, SqlParams)]
 #[table("users")]
@@ -320,114 +397,234 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     
     let delete_user = DeleteUser { id: 1 };
-    let result = delete(&client, delete_user).await?;
     
-    println!("Number of records deleted: {}", result);
+    // Function approach
+    let delete_result = delete(&client, delete_user).await?;
+    
+    // or extension method approach
+    let delete_user = DeleteUser { id: 2 };
+    let delete_result = client.delete(delete_user).await?;
+    
+    println!("Number of records deleted: {}", delete_result);
+    
     Ok(())
 }
 ```
 
-## Using Deadpool
+## Transaction Operations
 
-To use parsql with Deadpool connection pool, first you need to enable the "deadpool-postgres" feature in your cargo.toml file. Then, you can use parsql functions on clients obtained from the pool.
+There are two different approaches for performing database operations within a transaction:
 
-```rust
-use deadpool_postgres::{Config, Pool};
-use tokio_postgres::NoTls;
-use parsql::tokio_postgres::{get, insert};
+#### 1. Using the `CrudOps` trait on the Transaction object
 
-// Get operation with pool connection
-async fn fetch_user(pool: &Pool, user_id: i64) -> Result<GetUser, Box<dyn std::error::Error>> {
-    let client = pool.get().await?;
-    let get_user = GetUser::new(user_id);
-    let result = get(&client, get_user).await?;
-    Ok(result)
-}
-
-// Insert operation with pool connection
-async fn create_user(pool: &Pool, user: InsertUser) -> Result<i64, Box<dyn std::error::Error>> {
-    let client = pool.get().await?;
-    let result = insert(&client, user).await?;
-    Ok(result)
-}
-```
-
-## Advanced Features
-
-### Using Joins
+The `Transaction` struct implements the `CrudOps` trait, allowing you to use the same extension methods on the `Transaction` object as you would on a `Client` object:
 
 ```rust
-#[derive(Queryable, FromRow, SqlParams, Debug)]
+use tokio_postgres::{NoTls, Error};
+use parsql::tokio_postgres::{CrudOps, transactional};
+use parsql::macros::{Insertable, Updateable, SqlParams};
+
+#[derive(Insertable, SqlParams)]
 #[table("users")]
-#[select("users.id, users.name, posts.title as post_title")]
-#[join("LEFT JOIN posts ON users.id = posts.user_id")]
-#[where_clause("users.id = $")]
-pub struct UserWithPosts {
-    pub id: i64,
-    pub name: String,
-    pub post_title: Option<String>,
+struct InsertUser {
+    name: String,
+    email: String,
+    state: i16,
 }
-```
 
-### Grouping and Ordering
-
-```rust
-#[derive(Queryable, FromRow, SqlParams, Debug)]
+#[derive(Updateable, SqlParams)]
 #[table("users")]
-#[select("state, COUNT(*) as user_count")]
-#[group_by("state")]
-#[order_by("user_count DESC")]
-#[having("COUNT(*) > 5")]
-pub struct UserStats {
-    pub state: i16,
-    pub user_count: i64,
-}
-```
-
-### Custom Select Statements
-
-```rust
-#[derive(Queryable, FromRow, SqlParams, Debug)]
-#[table("users")]
-#[select("id, name, email, CASE WHEN state = 1 THEN 'Active' ELSE 'Inactive' END as status")]
 #[where_clause("id = $")]
-pub struct UserWithStatus {
-    pub id: i64,
-    pub name: String,
-    pub email: String,
-    pub status: String,
+struct ActivateUser {
+    id: i64,
+    state: i16,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+    let (mut client, connection) = tokio_postgres::connect(
+        "host=localhost user=postgres dbname=test",
+        NoTls,
+    ).await?;
+    
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("Connection error: {}", e);
+        }
+    });
+    
+    // Start a transaction
+    let transaction = client.transaction().await?;
+    
+    // Insert a user using CrudOps trait method
+    let user = InsertUser {
+        name: "John".to_string(),
+        email: "john@example.com".to_string(),
+        state: 0, // inactive
+    };
+    
+    // Direct insert operation within transaction
+    let rows = transaction.insert(user).await?;
+    println!("Rows affected: {}", rows);
+    
+    // Activate the user using CrudOps trait method
+    let activate = ActivateUser {
+        id: 1, // ID of the inserted user
+        state: 1, // active
+    };
+    
+    // Direct update operation within transaction
+    let updated = transaction.update(activate).await?;
+    println!("Update successful: {}", updated);
+    
+    // Commit the transaction
+    transaction.commit().await?;
+    
+    Ok(())
 }
 ```
 
-## SQL Query Tracing
+#### 2. Using the `transactional` module
 
-To see the SQL queries being generated, you can set the `PARSQL_TRACE` environment variable:
+You can use the helper functions from the `transactional` module to perform operations:
 
-```sh
-PARSQL_TRACE=1 cargo run
+```rust
+use tokio_postgres::{NoTls, Error};
+use parsql::tokio_postgres::transactional;
+use parsql::macros::{Insertable, Updateable, SqlParams};
+
+#[derive(Insertable, SqlParams)]
+#[table("users")]
+struct InsertUser {
+    name: String,
+    email: String,
+    state: i16,
+}
+
+#[derive(Updateable, SqlParams)]
+#[table("users")]
+#[where_clause("id = $")]
+struct ActivateUser {
+    id: i64,
+    state: i16,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+    let (mut client, connection) = tokio_postgres::connect(
+        "host=localhost user=postgres dbname=test",
+        NoTls,
+    ).await?;
+    
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("Connection error: {}", e);
+        }
+    });
+    
+    // Start a transaction
+    let tx = transactional::begin(&mut client).await?;
+    
+    // Insert a user
+    let user = InsertUser {
+        name: "John".to_string(),
+        email: "john@example.com".to_string(),
+        state: 0, // inactive
+    };
+    
+    // Insert operation within transaction
+    let (tx, rows) = transactional::tx_insert(tx, user).await?;
+    println!("Rows affected: {}", rows);
+    
+    // Activate the user
+    let activate = ActivateUser {
+        id: 1, // ID of the inserted user
+        state: 1, // active
+    };
+    
+    // Update operation within transaction
+    let (tx, updated) = transactional::tx_update(tx, activate).await?;
+    println!("Update successful: {}", updated);
+    
+    // Commit the transaction
+    tx.commit().await?;
+    
+    Ok(())
+}
 ```
 
-This will print all queries generated for tokio-postgres to the console.
+### Transaction Helper Functions
+
+The `transactional` module provides the following functions:
+
+- `begin(&mut client)`: Starts a new transaction
+- `tx_insert(transaction, entity)`: Performs an insert operation within a transaction and returns the transaction and the number of affected rows
+- `tx_update(transaction, entity)`: Performs an update operation within a transaction and returns the transaction and the update status
+- `tx_delete(transaction, entity)`: Performs a delete operation within a transaction and returns the transaction and the number of deleted rows
+- `tx_get(transaction, params)`: Retrieves a single record within a transaction and returns the transaction and the record
+- `tx_get_all(transaction, params)`: Retrieves multiple records within a transaction and returns the transaction and the records
+- `tx_select(transaction, entity, to_model)`: Executes a custom query within a transaction and transforms the result using a provided function
+- `tx_select_all(transaction, entity, to_model)`: Executes a custom query within a transaction and transforms all results using a provided function
+
+Each function returns the transaction object, allowing you to chain operations:
+
+```rust
+let tx = transactional::begin(&mut client).await?;
+let (tx, _) = transactional::tx_insert(tx, user1).await?;
+let (tx, _) = transactional::tx_insert(tx, user2).await?;
+let (tx, _) = transactional::tx_update(tx, activate_user).await?;
+tx.commit().await?;
+```
 
 ## Performance Tips
 
-1. **Prepared Statements**: tokio-postgres runs queries as prepared statements, and parsql uses this feature, which helps protect against SQL injection attacks.
+* Reuse queries with the same SQL structure to take advantage of the query plan cache
+* Use connection pools for large numbers of queries
+* Use pagination (limit and offset) instead of `get_all` for large datasets
+* Apply filters at the database level, not in your application
 
-2. **Connection Pool**: Using deadpool-postgres provides better performance for high-load applications.
-
-3. **Asynchronous Operations**: By running your operations asynchronously with tokio-postgres, you can make your application more efficient.
-
-## Error Handling
-
-Use Rust's `Result` mechanism to catch and handle errors that may occur during tokio-postgres operations:
+## Error Catching and Handling
 
 ```rust
-match get(&client, get_user).await {
-    Ok(user) => println!("User found: {:?}", user),
-    Err(e) => eprintln!("Error occurred: {}", e),
+async fn handle_database() -> Result<(), Box<dyn std::error::Error>> {
+    let (client, connection) = tokio_postgres::connect(
+        "host=localhost user=postgres password=postgres dbname=test",
+        NoTls,
+    ).await?;
+    
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("Connection error: {}", e);
+        }
+    });
+    
+    let result = match get(&client, user_query).await {
+        Ok(user) => {
+            println!("User found: {:?}", user);
+            // Operation successful
+            Ok(())
+        },
+        Err(e) => match e.code() {
+            // Handle specific PostgreSQL error codes
+            Some(code) if code == &tokio_postgres::error::SqlState::UNIQUE_VIOLATION => {
+                println!("Uniqueness violation: {}", e);
+                Err(e.into())
+            },
+            Some(code) if code == &tokio_postgres::error::SqlState::FOREIGN_KEY_VIOLATION => {
+                println!("Foreign key violation: {}", e);
+                Err(e.into())
+            },
+            _ => {
+                println!("General database error: {}", e);
+                Err(e.into())
+            }
+        },
+    };
+    
+    result
 }
 ```
 
-## Complete Example Project
+## Licensing
 
-For a complete example project, see the [examples/tokio-postgres](../examples/tokio-postgres) directory in the main parsql repository. 
+This library is licensed under the MIT or Apache-2.0 license. 

@@ -10,12 +10,11 @@ license.workspace = true
 
 [features]
 default = []
-deadpool-postgres = ["dep:deadpool-postgres"]
 
 [dependencies]
 postgres = { version = "0.19.10" }
 tokio-postgres = { version = "0.7.13" }
-deadpool-postgres = { version = "0.14.1", optional = true }
+async-trait = "0.1.87"
 
 [dependencies.parsql-macros]
 workspace = true

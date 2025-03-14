@@ -2,7 +2,7 @@
 name = "parsql-macros"
 description = "Parsql için yardımcı makroları barındıran küfedir."
 version.workspace = true
-# version = "0.3.2"
+# version = "0.3.3"
 license.workspace = true
 edition.workspace = true
 authors.workspace = true

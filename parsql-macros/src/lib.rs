@@ -23,6 +23,11 @@
 use proc_macro::TokenStream;
 
 mod crud_impl;
+mod numbering_test;
+#[path = "tests/param_numbering_tests.rs"]
+mod param_numbering_tests;
+#[path = "tests/sql_param_counter_tests.rs"]
+mod sql_param_counter_tests;
 
 /// Derive macro for generating UPDATE queries.
 /// 
@@ -55,7 +60,9 @@ pub fn derive_insertable(input: TokenStream) -> TokenStream {
 /// - `group_by`: GROUP BY clause (optional)
 /// - `order_by`: ORDER BY clause (optional)
 /// - `having`: HAVING clause (optional)
-#[proc_macro_derive(Queryable, attributes(table, where_clause, select, join, group_by, order_by, having))]
+/// - `limit`: LIMIT clause (optional)
+/// - `offset`: OFFSET clause (optional)
+#[proc_macro_derive(Queryable, attributes(table, where_clause, select, join, group_by, order_by, having, limit, offset))]
 pub fn derive_queryable(input: TokenStream) -> TokenStream {
     crud_impl::derive_queryable_impl(input)
 }
@@ -112,4 +119,8 @@ pub fn derive_from_row(input: TokenStream) -> TokenStream {
         panic!("At least one database feature must be enabled (postgres or sqlite)");
     }
 }
+
+// SqlParamCounter ve number_where_clause_params fonksiyonlarını sadece test için dışa aktarıyoruz
+#[cfg(test)]
+pub(crate) use crud_impl::{SqlParamCounter, number_where_clause_params};
 
