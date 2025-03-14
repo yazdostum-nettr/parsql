@@ -8,3 +8,6 @@ pub use parsql_postgres as postgres;
 
 #[cfg(feature = "tokio-postgres")]
 pub use parsql_tokio_postgres as tokio_postgres;
+
+#[cfg(feature = "deadpool-postgres")]
+pub use parsql_deadpool_postgres as deadpool_postgres;
