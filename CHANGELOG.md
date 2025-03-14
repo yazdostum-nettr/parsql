@@ -2,7 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
-## [unreleased]
+## [0.3.3] - 2025-03-14
+
+### 🚀 Features
+
+- Artık  işlemleri, ilgili cratelerin veritabanı istemci nesneleri üzerinde bir extension metod gibi çağırılabilecek. Ek olarak crate'lere transactional işlem desteği eklendi.
+- Bağlantı havuzu yapısına daha etkin destek için 'parsql-deadpool-posgres' cratesi oluşturuldu. crud işlemleri, 'Pool' struct'ı için extension olarak genişletildi. Transactional işlemler içinde daha efektif destekler eklendi.
+- 'Queryable' derive makrosuna sayfalama desteği eklemek için 'limit' ve 'offset' öznitelikleri eklendi.
+
+### 🚜 Refactor
+
+- 'parsql-tokio-postgres' paketi içinde bir özellik olarak ele aldığımız 'deadpool-postgres' için ayrı bir paket üzerinden daha detaylı tüm özellikleri sağlayacak şekilde yeniden düzenleme çalışması yapıldı.
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Paket dökümantasyon düzenlemeleri.
+
+## [0.3.2] - 2025-03-09
 
 ### 🚀 Features
 
@@ -12,7 +28,6 @@ All notable changes to this project will be documented in this file.
 - 'join' özniteliği ile daha karmaşık sorgular mümkün hale getirilmiştir.
 - Environment variable 'PARSQL_TRACE=1' olarak işaretli haldeyken çalıştırılırsa, trace loglarında oluşturulan sql sorgularının console'da gösterilmesini sağlayacak özellikler paketlere eklendi.
 - Daha gelişmiş sorgulara imkan tanımak için 'group_by', 'order_by' ve 'having' özniteliği 'Queryable' derive makrosuna eklendi.
-- 'join' özniteliği ile daha karmaşık sorgular mümkün hale getirilmiştir. SQL Injection koruması için geliştirmeleri barındırır.
 
 ### 🚜 Refactor
 
@@ -38,6 +53,10 @@ All notable changes to this project will be documented in this file.
 - CHANGELOG.md güncellendi.
 - Genel olarak proje belgeleri yeni versiyona göre güncellendi ve re-organize edildi.
 - Paketlerdeki metodların yorumları yeni geliştirmelere göre güncellendi.
+- README.md de düzenleme yapıldı.
+- Dökümantasyonlarda güncellemeler yapıldı, CHANGELOG.md güncellendi.
+- Dökümantasyon güncellemeleri ve versiyon yükseltme v0.3.2
+- Dökümantasyon güncellemeleri için düzenlemeler.
 
 ### ⚙️ Miscellaneous Tasks
 

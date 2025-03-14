@@ -1,5 +1,27 @@
 # parsql
-An experimental SQL helper library
+
+[![Version](https://img.shields.io/crates/v/parsql.svg)](https://crates.io/crates/parsql)
+[![Documentation](https://docs.rs/parsql/badge.svg)](https://docs.rs/parsql)
+[![License](https://img.shields.io/crates/l/parsql.svg)](https://github.com/yazdostum-nettr/parsql/blob/master/LICENSE)
+
+An experimental SQL helper crate. This is not an ORM tool. The aim is to make it easier to write and use simple SQL statements.
+
+## Features
+
+- Automatic SQL query generation
+- Secure parameter management
+- Support for multiple database systems (PostgreSQL, SQLite, Tokio PostgreSQL, Deadpool PostgreSQL)
+- Type-safe database operations
+- Automatic protection against SQL Injection attacks
+- **New (0.3.3):** Complete pagination support: efficiently paginate results using `limit` and `offset` attributes
+- `Queryable` derivation attribute supports table name, where statement, select statement, group by, having, order by, limit and offset statements.
+- `Insertable` derivation attribute generates table-specific INSERT statements.
+- `Updateable` derivation attribute generates table-specific UPDATE statements.
+- `Deletable` derivation attribute generates table-specific DELETE statements.
+- `SqlParams` derivation attribute allows the structure to be used for SQL parameters.
+- `UpdateParams` derivation attribute allows the structure to be used for UPDATE statements.
+- `FromRow` derivation attribute allows database rows to be converted to the structure.
+- **New (0.3.3):** Added `PARSQL_TRACE` environment variable support for SQL trace logging.
 
 ## What It Does
 
@@ -26,25 +48,26 @@ Parsql supports the following database systems:
 
 ## Installation
 
-When adding the crate to your application, you need to specify which database you'll be working with as a 'feature'. You can add the package to your Cargo.toml file as follows:
+Add to your Cargo.toml file as follows:
 
-### For SQLite
 ```toml
+[dependencies]
+parsql = "0.3.3"
+```
+
+and select the feature you need:
+
+```toml
+# For SQLite
 parsql = { version = "0.3.3", features = ["sqlite"] }
-```
 
-### For PostgreSQL
-```toml
+# For PostgreSQL
 parsql = { version = "0.3.3", features = ["postgres"] }
-```
 
-### For Tokio PostgreSQL
-```toml
+# For Tokio PostgreSQL
 parsql = { version = "0.3.3", features = ["tokio-postgres"] }
-```
 
-### For Deadpool PostgreSQL connection pool
-```toml
+# For Deadpool PostgreSQL
 parsql = { version = "0.3.3", features = ["deadpool-postgres"] }
 ```
 

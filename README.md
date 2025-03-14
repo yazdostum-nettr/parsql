@@ -1,5 +1,27 @@
 # parsql
-Deneyimsel SQL yardımcısı
+
+[![Version](https://img.shields.io/crates/v/parsql.svg)](https://crates.io/crates/parsql)
+[![Documentation](https://docs.rs/parsql/badge.svg)](https://docs.rs/parsql)
+[![License](https://img.shields.io/crates/l/parsql.svg)](https://github.com/yazdostum-nettr/parsql/blob/master/LICENSE)
+
+Deneyimsel bir sql yardımcı küfesidir. Bu bir ORM aracı değildir. Amaç sql yazımı ve kullanımında basit cümlecikler için kolaylık sağlamaktır.
+
+## Özellikler
+
+- Otomatik SQL sorgu oluşturma
+- Güvenli parametre yönetimi
+- Birden fazla veritabanı sistemi için destek (PostgreSQL, SQLite, Tokio PostgreSQL, Deadpool PostgreSQL)
+- Tip güvenliği olan veritabanı işlemleri
+- SQL Injection saldırılarına karşı otomatik koruma
+- **Yeni (0.3.3):** Sayfalama (pagination) için tam destek: `limit` ve `offset` öznitelikleri ile verimli sayfalama yapabilirsiniz
+- `Queryable` türetme özniteliği, tablo adı, where ifadesi, select ifadesi, group by, having, order by, limit ve offset ifadeleri için destek sağlar.
+- `Insertable` türetme özniteliği, tabloya özgü INSERT ifadeleri oluşturur.
+- `Updateable` türetme özniteliği, tabloya özgü UPDATE ifadeleri oluşturur.
+- `Deletable` türetme özniteliği, tabloya özgü DELETE ifadeleri oluşturur.
+- `SqlParams` türetme özniteliği, yapının SQL parametreleri için kullanılmasını sağlar.
+- `UpdateParams` türetme özniteliği, yapının UPDATE ifadeleri için kullanılmasını sağlar.
+- `FromRow` türetme özniteliği, veritabanı satırlarının yapıya dönüştürülmesini sağlar.
+- **Yeni (0.3.3):** SQL trace kayıtları için `PARSQL_TRACE` çevre değişkeni desteği eklendi.
 
 ## Ne İşe Yarar?
 
@@ -24,27 +46,28 @@ Parsql aşağıdaki veritabanı sistemlerini desteklemektedir:
 - **Tokio PostgreSQL** (asenkron): `parsql-tokio-postgres` paketi
 - **Deadpool PostgreSQL** (asenkron bağlantı havuzu): `parsql-deadpool-postgres` paketi
 
-## Küfe'nin Yüklenmesi
+## Kurulum
 
-Uygulamanıza küfeyi yüklerken hangi veritabanı ile çalışacağınızı 'feature' olarak belirtmeniz gerekiyor. Cargo.toml dosyanıza paketi şu şekilde ekleyebilirsiniz:
+Cargo.toml dosyanıza şu şekilde ekleyin:
 
-### SQLite için
 ```toml
+[dependencies]
+parsql = "0.3.3"
+```
+
+ve özellik seçimini yapın:
+
+```toml
+# SQLite için
 parsql = { version = "0.3.3", features = ["sqlite"] }
-```
 
-### PostgreSQL için
-```toml
+# PostgreSQL için
 parsql = { version = "0.3.3", features = ["postgres"] }
-```
 
-### Tokio PostgreSQL için
-```toml
+# Tokio PostgreSQL için 
 parsql = { version = "0.3.3", features = ["tokio-postgres"] }
-```
 
-### Deadpool PostgreSQL bağlantı havuzu için
-```toml
+# Deadpool PostgreSQL için
 parsql = { version = "0.3.3", features = ["deadpool-postgres"] }
 ```
 
@@ -329,24 +352,3 @@ Her veritabanı adaptörü için daha detaylı bilgi ve örnekler, ilgili alt pa
 ## Lisans
 
 Bu proje MIT lisansı altında lisanslanmıştır.
-
-Özellikler:
-- Otomatik SQL sorgu üretimi
-- Tip güvenliği sağlayan parametre yönetimi
-- Birden fazla veritabanı sistemi desteği (PostgreSQL, SQLite)
-- Makrolar ile SQL enjeksiyonu koruması
-- Limit ve Offset desteği ile sayfalama işlemleri
-
-### Queryable
-
-Bu türetme makrosu, bir yapıya SELECT sorguları oluşturma yeteneği ekler.
-
-Desteklenen öznitelikler:
-- `table`: SQL tablosunun adı
-- `where_clause`: SQL WHERE ifadesi
-- `select`: SQL SELECT ifadesi
-- `group_by`: SQL GROUP BY ifadesi
-- `having`: SQL HAVING ifadesi
-- `order_by`: SQL ORDER BY ifadesi
-- `limit`: SQL LIMIT ifadesi
-- `offset`: SQL OFFSET ifadesi
