@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.3.7] - 2025-03-20
+## [0.3.7] - 2025-03-22
 
 ### 🐛 Bug Fixes
 
@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🚜 Refactor
 
-- Bu commit, parsql-sqlite paketinde metod isimlerini diğer parsql paketleriyle tutarlı hale getirmek amacıyla aşağıdaki değişiklikleri içermektedir:Yapılan Değişiklikler
+- Extend edilen paketlerle metod ismi uyumu için yapılan çalışmaları barındırır.
 
 * Kod Değişiklikleri
 
@@ -31,7 +31,7 @@ All notable changes to this project will be documented in this file.
 - Belgelendirmelerde bölüm isimleri ve başlıklar tutarlı hale getirildi
 - Türkçe ve İngilizce belgeler senkronize edildi
 
-Bu değişiklikler, parsql ekosistemindeki tüm paketlerin tutarlı bir isimlendirme düzenine sahip olmasını sağlamaktadır. Geriye dönük uyumluluk korunduğu için mevcut kodların çalışmaya devam etmesi garanti edilmiştir.
+Geriye dönük uyumluluk korunduğu için mevcut kodların çalışmaya devam etmesi garanti edilmiştir.
 
 ### 📚 Documentation
 
@@ -43,6 +43,7 @@ Bu değişiklikler, parsql ekosistemindeki tüm paketlerin tutarlı bir isimlend
 - *(release)* Bugfix için versiyon yükseltme.
 - *(release)* Deadpool-postgres için export durumundan kaynaklı versiyon yükseltme.
 - *(release)* Versiyon problemleri...
+- *(release)* Yayınlama öncesi versiyon için dökümantasyon düzenleme çalışmaları.
 
 ## [0.3.4] - 2025-03-14
 
