@@ -87,7 +87,7 @@ pub trait CrudOps {
     /// 
     /// # Returns
     /// * `Result<T, Error>` - On success, returns the retrieved record; on failure, returns Error
-    fn get<T: SqlQuery + FromRow + SqlParams>(&self, entity: &T) -> Result<T, Error>;
+    fn fetch<T: SqlQuery + FromRow + SqlParams>(&self, entity: &T) -> Result<T, Error>;
 
     /// Retrieves multiple records from the SQLite database.
     /// 
@@ -96,7 +96,43 @@ pub trait CrudOps {
     /// 
     /// # Returns
     /// * `Result<Vec<T>, Error>` - On success, returns a vector of records; on failure, returns Error
-    fn get_all<T: SqlQuery + FromRow + SqlParams>(&self, entity: &T) -> Result<Vec<T>, Error>;
+    fn fetch_all<T: SqlQuery + FromRow + SqlParams>(&self, entity: &T) -> Result<Vec<T>, Error>;
+
+    /// Retrieves a single record from the SQLite database.
+    /// 
+    /// # Deprecated
+    /// This function has been renamed to `fetch`. Please use `fetch` instead.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object containing query parameters (must implement SqlQuery, FromRow, and SqlParams traits)
+    /// 
+    /// # Returns
+    /// * `Result<T, Error>` - On success, returns the retrieved record; on failure, returns Error
+    #[deprecated(
+        since = "0.3.7",
+        note = "Renamed to `fetch`. Please use `fetch` function instead."
+    )]
+    fn get<T: SqlQuery + FromRow + SqlParams>(&self, entity: &T) -> Result<T, Error> {
+        self.fetch(entity)
+    }
+
+    /// Retrieves multiple records from the SQLite database.
+    /// 
+    /// # Deprecated
+    /// This function has been renamed to `fetch_all`. Please use `fetch_all` instead.
+    /// 
+    /// # Arguments
+    /// * `entity` - Data object containing query parameters (must implement SqlQuery, FromRow, and SqlParams traits)
+    /// 
+    /// # Returns
+    /// * `Result<Vec<T>, Error>` - A vector of retrieved records or an error
+    #[deprecated(
+        since = "0.3.7",
+        note = "Renamed to `fetch_all`. Please use `fetch_all` function instead."
+    )]
+    fn get_all<T: SqlQuery + FromRow + SqlParams>(&self, entity: &T) -> Result<Vec<T>, Error> {
+        self.fetch_all(entity)
+    }
 
     /// Executes a custom query and transforms the result using the provided function.
     /// 
@@ -164,7 +200,7 @@ impl CrudOps for rusqlite::Connection {
         self.execute(&sql, param_refs.as_slice())
     }
 
-    fn get<T: SqlQuery + FromRow + SqlParams>(&self, entity: &T) -> Result<T, Error> {
+    fn fetch<T: SqlQuery + FromRow + SqlParams>(&self, entity: &T) -> Result<T, Error> {
         let sql = T::query();
         
         if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
@@ -175,12 +211,17 @@ impl CrudOps for rusqlite::Connection {
         let param_refs: Vec<&dyn ToSql> = params.iter().map(|p| *p as &dyn ToSql).collect();
         
         let mut stmt = self.prepare(&sql)?;
-        let row = stmt.query_row(param_refs.as_slice(), |row| T::from_row(row))?;
+        let mut rows = stmt.query(param_refs.as_slice())?;
         
-        Ok(row)
+        if let Some(row) = rows.next()? {
+            let result = T::from_row(row)?;
+            Ok(result)
+        } else {
+            Err(Error::QueryReturnedNoRows)
+        }
     }
 
-    fn get_all<T: SqlQuery + FromRow + SqlParams>(&self, entity: &T) -> Result<Vec<T>, Error> {
+    fn fetch_all<T: SqlQuery + FromRow + SqlParams>(&self, entity: &T) -> Result<Vec<T>, Error> {
         let sql = T::query();
         
         if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
@@ -194,8 +235,8 @@ impl CrudOps for rusqlite::Connection {
         let rows = stmt.query_map(param_refs.as_slice(), |row| T::from_row(row))?;
         
         let mut results = Vec::new();
-        for row in rows {
-            results.push(row?);
+        for row_result in rows {
+            results.push(row_result?);
         }
         
         Ok(results)
@@ -450,7 +491,7 @@ pub fn delete<T: SqlQuery + SqlParams>(
     conn.delete(entity)
 }
 
-/// # get
+/// # fetch
 /// 
 /// Retrieves a single record from the database based on a specific condition.
 /// 
@@ -459,14 +500,12 @@ pub fn delete<T: SqlQuery + SqlParams>(
 /// - `entity`: Query parameter object (must implement SqlQuery, FromRow, and SqlParams traits)
 /// 
 /// ## Return Value
-/// - `Result<T, Error>`: On success, returns the retrieved record; on failure, returns Error
+/// - `Result<T, Error>`: On success, returns the queried record; on failure, returns Error
 /// 
 /// ## Struct Definition
 /// Structs used with this function should be annotated with the following derive macros:
 /// 
 /// ```rust,no_run
-/// use parsql_macros::{Queryable, FromRow, SqlParams};
-/// 
 /// #[derive(Queryable, FromRow, SqlParams)]  // Required macros
 /// #[table("table_name")]                    // Table name to query
 /// #[where_clause("id = ?")]                 // Query condition
@@ -482,7 +521,7 @@ pub fn delete<T: SqlQuery + SqlParams>(
 /// ```rust,no_run
 /// use rusqlite::{Connection, Result};
 /// use parsql_macros::{Queryable, FromRow, SqlParams};
-/// use parsql_sqlite::get;
+/// use parsql_sqlite::fetch;
 /// 
 /// fn main() -> Result<()> {
 ///     // Create database connection
@@ -508,19 +547,19 @@ pub fn delete<T: SqlQuery + SqlParams>(
 ///     };
 /// 
 ///     // Execute query
-///     let user = get(&conn, get_query)?;
+///     let user = fetch(&conn, &get_query)?;
 ///     println!("User: {:?}", user);
 ///     Ok(())
 /// }
 /// ```
-pub fn get<T: SqlQuery + FromRow + SqlParams>(
+pub fn fetch<T: SqlQuery + FromRow + SqlParams>(
     conn: &rusqlite::Connection,
     entity: &T,
 ) -> Result<T, Error> {
-    conn.get(entity)
+    conn.fetch(entity)
 }
 
-/// # get_all
+/// # fetch_all
 /// 
 /// Retrieves multiple records from the database based on a specific condition.
 /// 
@@ -529,68 +568,100 @@ pub fn get<T: SqlQuery + FromRow + SqlParams>(
 /// - `entity`: Query parameter object (must implement SqlQuery, FromRow, and SqlParams traits)
 /// 
 /// ## Return Value
-/// - `Result<Vec<T>, Error>`: On success, returns a vector of retrieved records; on failure, returns Error
-/// 
-/// ## Struct Definition
-/// Structs used with this function should be annotated with the following derive macros:
-/// 
-/// ```rust,no_run
-/// use parsql_macros::{Queryable, FromRow, SqlParams};
-/// 
-/// #[derive(Queryable, FromRow, SqlParams)]  // Required macros
-/// #[table("table_name")]                    // Table name to query
-/// #[where_clause("state = ?")]              // Query condition
-/// pub struct MyEntity {
-///     pub state: i16,                       // Field used in the condition
-///     pub field1: String,                   // Fields to retrieve
-///     pub field2: i32,
-/// }
-/// ```
+/// - `Result<Vec<T>, Error>`: On success, returns a vector of records; on failure, returns Error
 /// 
 /// ## Example Usage
 /// 
 /// ```rust,no_run
 /// use rusqlite::{Connection, Result};
 /// use parsql_macros::{Queryable, FromRow, SqlParams};
-/// use parsql_sqlite::get_all;
+/// use parsql_sqlite::fetch_all;
 /// 
 /// fn main() -> Result<()> {
 ///     // Create database connection
 ///     let conn = Connection::open("test.db")?;
-///     conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT, state INTEGER)", [])?;
-///     conn.execute("INSERT INTO users (name, email, state) VALUES ('John', 'john@example.com', 1)", [])?;
-///     conn.execute("INSERT INTO users (name, email, state) VALUES ('Jane', 'jane@example.com', 1)", [])?;
+///     conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT, active INTEGER)", [])?;
+///     conn.execute("INSERT INTO users (id, name, email, active) VALUES (1, 'John', 'john@example.com', 1)", [])?;
+///     conn.execute("INSERT INTO users (id, name, email, active) VALUES (2, 'Jane', 'jane@example.com', 1)", [])?;
 /// 
 ///     // Define a query
 ///     #[derive(Queryable, FromRow, SqlParams)]
 ///     #[table("users")]
-///     #[where_clause("state = ?")]
+///     #[where_clause("active = ?")]
 ///     pub struct GetActiveUsers {
 ///         pub id: i64,
 ///         pub name: String,
 ///         pub email: String,
-///         pub state: i16,
+///         pub active: i32,
 ///     }
 /// 
 ///     // Create query parameters (get all active users)
-///     let get_query = GetActiveUsers {
+///     let query = GetActiveUsers {
 ///         id: 0,
 ///         name: String::new(),
 ///         email: String::new(),
-///         state: 1,
+///         active: 1,
 ///     };
 /// 
 ///     // Execute query
-///     let users = get_all(&conn, get_query)?;
+///     let users = fetch_all(&conn, &query)?;
 ///     println!("Active users: {:?}", users);
 ///     Ok(())
 /// }
 /// ```
+pub fn fetch_all<T: SqlQuery + FromRow + SqlParams>(
+    conn: &rusqlite::Connection,
+    entity: &T,
+) -> Result<Vec<T>, Error> {
+    conn.fetch_all(entity)
+}
+
+/// # get
+/// 
+/// Retrieves a single record from the database based on a specific condition.
+/// 
+/// # Deprecated
+/// This function has been renamed to `fetch`. Please use `fetch` instead.
+/// 
+/// ## Parameters
+/// - `conn`: SQLite database connection
+/// - `entity`: Query parameter object (must implement SqlQuery, FromRow, and SqlParams traits)
+/// 
+/// ## Return Value
+/// - `Result<T, Error>`: On success, returns the queried record; on failure, returns Error
+#[deprecated(
+    since = "0.3.7",
+    note = "Renamed to `fetch`. Please use `fetch` function instead."
+)]
+pub fn get<T: SqlQuery + FromRow + SqlParams>(
+    conn: &rusqlite::Connection,
+    entity: &T,
+) -> Result<T, Error> {
+    fetch(conn, entity)
+}
+
+/// # get_all
+/// 
+/// Retrieves multiple records from the database based on a specific condition.
+/// 
+/// # Deprecated
+/// This function has been renamed to `fetch_all`. Please use `fetch_all` instead.
+/// 
+/// ## Parameters
+/// - `conn`: SQLite database connection
+/// - `entity`: Query parameter object (must implement SqlQuery, FromRow, and SqlParams traits)
+/// 
+/// ## Return Value
+/// - `Result<Vec<T>, Error>`: On success, returns a vector of records; on failure, returns Error
+#[deprecated(
+    since = "0.3.7",
+    note = "Renamed to `fetch_all`. Please use `fetch_all` function instead."
+)]
 pub fn get_all<T: SqlQuery + FromRow + SqlParams>(
     conn: &rusqlite::Connection,
     entity: &T,
 ) -> Result<Vec<T>, Error> {
-    conn.get_all(entity)
+    fetch_all(conn, entity)
 }
 
 /// # select
@@ -647,7 +718,7 @@ pub fn get_all<T: SqlQuery + FromRow + SqlParams>(
 ///     };
 /// 
 ///     // Execute query with custom mapping
-///     let user = select(&mut conn, get_query, to_user)?;
+///     let user = select(&conn, &get_query, to_user)?;
 ///     println!("User: {:?}", user);
 ///     Ok(())
 /// }
@@ -720,7 +791,7 @@ where
 ///     };
 /// 
 ///     // Execute query with custom mapping
-///     let users = select_all(&mut conn, get_query, to_user)?;
+///     let users = select_all(&conn, &get_query, to_user)?;
 ///     println!("Active users: {:?}", users);
 ///     Ok(())
 /// }

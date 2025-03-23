@@ -16,7 +16,7 @@
 //! 
 //! ```rust,no_run
 //! use rusqlite::{Connection, Result};
-//! use parsql::sqlite::{get, insert};
+//! use parsql::sqlite::{fetch, insert};
 //! 
 //! #[derive(Insertable, SqlParams)]
 //! #[table("users")]
@@ -47,7 +47,7 @@
 //!     
 //!     // Get the user back
 //!     let get_user = GetUser::new(id as i32);
-//!     let user = get(&conn, &get_user)?;
+//!     let user = fetch(&conn, &get_user)?;
 //!     
 //!     println!("User: {:?}", user);
 //!     Ok(())
@@ -96,7 +96,7 @@
 //!         name: String::new(),
 //!         email: String::new(),
 //!     };
-//!     let user = conn.get(&get_user)?;
+//!     let user = conn.fetch(&get_user)?;
 //!     
 //!     println!("User: {:?}", user);
 //!     Ok(())
@@ -154,6 +154,23 @@
 //!     Ok(())
 //! }
 //! ```
+//!
+//! ## Installation
+//!
+//! Add to your Cargo.toml file as follows:
+//!
+//! ```toml
+//! [dependencies]
+//! parsql = { version = "0.3.7", features = ["sqlite"] }
+//! ```
+//!
+//! or if you want to use this package directly:
+//!
+//! ```toml
+//! [dependencies]
+//! parsql-sqlite = "0.3.7"
+//! parsql-macros = "0.3.7"
+//! ```
 
 pub mod crud_ops;
 pub mod transactional_ops;
@@ -169,8 +186,8 @@ pub use crud_ops::{
     select_all, 
     update, 
     delete, 
-    get, 
-    get_all,
+    fetch, 
+    fetch_all,
     CrudOps,
 };
 

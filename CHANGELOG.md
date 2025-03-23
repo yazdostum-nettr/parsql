@@ -2,10 +2,66 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.7] - 2025-03-22
+
+### 🐛 Bug Fixes
+
+- Ana projeden deadpool-postrges cratesi export edildi.
+
+### 🚜 Refactor
+
+- Extend edilen paketlerle metod ismi uyumu için yapılan çalışmaları barındırır.
+
+* Kod Değişiklikleri
+
+- CrudOps trait'inde get ve get_all metodları fetch ve fetch_all olarak yeniden adlandırıldı
+- Eski metodlar geriye dönük uyumluluk için #[deprecated] olarak işaretlendi
+- transactional_ops.rs dosyasında tx_get ve tx_get_all fonksiyonları tx_fetch ve tx_fetch_all olarak yeniden adlandırıldı
+- lib.rs dosyasında yeni metod adları dışa aktarıldı
+
+* Belgelendirme Değişiklikleri
+
+- README.md ve README.en.md dosyalarındaki tüm örnekler ve açıklamalar güncellendi
+- Metod isimlerinin değiştirilmesiyle ilgili referanslar güncellendi
+- Örneklerde get yerine fetch kullanımı gösterildi
+
+* Diğer İyileştirmeler
+
+- Metod belgelerinde (doc comments) güncelleme ve iyileştirmeler yapıldı
+- Belgelendirmelerde bölüm isimleri ve başlıklar tutarlı hale getirildi
+- Türkçe ve İngilizce belgeler senkronize edildi
+
+Geriye dönük uyumluluk korunduğu için mevcut kodların çalışmaya devam etmesi garanti edilmiştir.
+
+### 📚 Documentation
+
+- Versiyon ile ilgili dökümantasyon güncellemesi.
+- V0.3.7 için CHANGELOG.md düzenlemesi.
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Bugfix için versiyon yükseltme.
+- *(release)* Deadpool-postgres için export durumundan kaynaklı versiyon yükseltme.
+- *(release)* Versiyon problemleri...
+- *(release)* Yayınlama öncesi versiyon için dökümantasyon düzenleme çalışmaları.
+
+## [0.3.4] - 2025-03-14
+
+### 🐛 Bug Fixes
+
+- Parsql-tokio-postgres ve parsql-deadpool-postgres crate'lerindeki extension metodların aseknron desteği güncellendi.
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V0.3.3 için hazırlıklar.
+
 ## [0.3.3] - 2025-03-14
 
 ### 🚀 Features
 
+- Artık  işlemleri, ilgili cratelerin veritabanı istemci nesneleri üzerinde bir  metod gibi çağırılabilecek.
+- Bağlantı havuzu yapısına daha etkin destek için,  cratesi oluşturuldu. Transactional işlemler içinde daha efektif destekler eklendi.
+- Derive makrosuna sayfalama desteği eklemek için  ve  öznitelikleri eklendi.
 - Artık  işlemleri, ilgili cratelerin veritabanı istemci nesneleri üzerinde bir extension metod gibi çağırılabilecek. Ek olarak crate'lere transactional işlem desteği eklendi.
 - Bağlantı havuzu yapısına daha etkin destek için 'parsql-deadpool-posgres' cratesi oluşturuldu. crud işlemleri, 'Pool' struct'ı için extension olarak genişletildi. Transactional işlemler içinde daha efektif destekler eklendi.
 - 'Queryable' derive makrosuna sayfalama desteği eklemek için 'limit' ve 'offset' öznitelikleri eklendi.

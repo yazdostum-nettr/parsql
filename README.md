@@ -48,27 +48,32 @@ Parsql aşağıdaki veritabanı sistemlerini desteklemektedir:
 
 ## Kurulum
 
-Cargo.toml dosyanıza şu şekilde ekleyin:
+Cargo.toml içinde aşağıdaki şekilde tanımlama yapın:
 
 ```toml
 [dependencies]
-parsql = "0.3.6"
+parsql = { version = "0.3.7", features = ["sqlite"] }
 ```
 
-ve özellik seçimini yapın:
+veya PostgreSQL için:
 
 ```toml
-# SQLite için
-parsql = { version = "0.3.6", features = ["sqlite"] }
+[dependencies]
+parsql = { version = "0.3.7", features = ["postgres"] }
+```
 
-# PostgreSQL için
-parsql = { version = "0.3.6", features = ["postgres"] }
+veya Tokio PostgreSQL için:
 
-# Tokio PostgreSQL için 
-parsql = { version = "0.3.6", features = ["tokio-postgres"] }
+```toml
+[dependencies]
+parsql = { version = "0.3.7", features = ["tokio-postgres"] }
+```
 
-# Deadpool PostgreSQL için
-parsql = { version = "0.3.6", features = ["deadpool-postgres"] }
+veya Deadpool PostgreSQL için:
+
+```toml
+[dependencies]
+parsql = { version = "0.3.7", features = ["deadpool-postgres"] }
 ```
 
 ## Temel Özellikler
@@ -121,8 +126,8 @@ Hem Pool hem de Transaction nesneleri için şu extension metodları kullanılab
 - `insert(entity)` - Kayıt ekler
 - `update(entity)` - Kayıt günceller
 - `delete(entity)` - Kayıt siler
-- `get(params)` - Tek bir kayıt getirir
-- `get_all(params)` - Birden fazla kayıt getirir
+- `fetch(params)` - Tek bir kayıt getirir
+- `fetch_all(params)` - Birden fazla kayıt getirir
 - `select(entity, to_model)` - Özel dönüştürücü fonksiyon ile tek kayıt getirir
 - `select_all(entity, to_model)` - Özel dönüştürücü fonksiyon ile çoklu kayıt getirir
 
@@ -209,7 +214,7 @@ Bu, çalıştırılan tüm SQL sorgularını konsola yazdıracaktır.
 
 ```rust
 use parsql::{
-    sqlite::{get, insert},
+    sqlite::{fetch, insert},
     macros::{Queryable, Insertable, FromRow, SqlParams},
 };
 use rusqlite::Connection;
@@ -254,7 +259,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Eklenen kayıt ID: {}", id);
     
     let get_user = GetUser::new(id);
-    let user = get(&conn, get_user)?;
+    let user = fetch(&conn, get_user)?;
     println!("Kullanıcı: {:?}", user);
     
     Ok(())
