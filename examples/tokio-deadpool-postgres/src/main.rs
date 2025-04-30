@@ -13,6 +13,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // .env dosyasını yükle (varsa)
     dotenv().ok();
+
+    std::env::set_var("PARSQL_TRACE", "1");
     
     // Bir zaman damgası oluştur - benzersiz e-posta adresleri için
     let timestamp = SystemTime::now()
@@ -71,7 +73,7 @@ async fn demo_crud_operations(repo: &UserRepository, timestamp: u64) -> Result<(
     println!("\n1. Kullanıcı Ekleme");
     let new_user = UserInsert::new(
         "Mehmet Yılmaz", 
-        &format!("mehmet.yilmaz-{}@example.com", timestamp),
+        &format!("mehmet.yilmaz-{}@exampleone.com", timestamp),
         1 // Aktif kullanıcı (state=1)
     );
     let user_id = repo.insert_user(new_user).await?;

@@ -45,7 +45,8 @@ pub fn derive_updateable(input: TokenStream) -> TokenStream {
 /// 
 /// # Attributes
 /// - `table`: The name of the table to insert into
-#[proc_macro_derive(Insertable, attributes(table))]
+/// - `returning`: The column to return after insert (optional)
+#[proc_macro_derive(Insertable, attributes(table, returning, sql_type))]
 pub fn derive_insertable(input: TokenStream) -> TokenStream {
     crud_impl::derive_insertable_impl(input)
 }

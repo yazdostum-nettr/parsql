@@ -23,7 +23,7 @@ fn pool_err_to_io_err(e: PoolError) -> Error {
 /// - `entity`: Eklenecek veri nesnesi (SqlQuery ve SqlParams trait'lerini uygulamalıdır)
 /// 
 /// ## Dönüş Değeri
-/// - `Result<u64, Error>`: Başarılı olursa, eklenen kayıt sayısını döndürür; başarısız olursa, Error döndürür
+/// - `Result<i32, Error>`: Başarılı olursa, eklenen kayıt ID'sini döndürür; başarısız olursa, Error döndürür
 /// 
 /// ## Yapı Tanımı
 /// Bu fonksiyonla kullanılan yapılar aşağıdaki derive makrolarıyla işaretlenmelidir:
@@ -78,7 +78,7 @@ fn pool_err_to_io_err(e: PoolError) -> Error {
 pub async fn insert<T: SqlQuery + SqlParams>(
     pool: &Pool,
     entity: T,
-) -> Result<u64, Error> {
+) -> Result<i32, Error> {
     let client = pool.get().await.map_err(pool_err_to_io_err)?;
     let sql = T::query();
     
@@ -87,7 +87,8 @@ pub async fn insert<T: SqlQuery + SqlParams>(
     }
 
     let params = entity.params();
-    client.execute(&sql, &params).await
+    let row = client.query_one(&sql, &params).await?;
+    row.try_get(0)
 }
 
 /// # update

@@ -1,7 +1,5 @@
 pub use parsql_macros as macros;
 
-use tokio_postgres::types::ToSql;
-
 /// Trait for generating SQL queries.
 /// This trait is implemented by the derive macro `Queryable`, `Insertable`, `Updateable`, and `Deletable`.
 pub trait SqlQuery {
@@ -71,3 +69,4 @@ pub use deadpool_postgres::{Pool, Client as PoolClient, PoolError, Transaction};
 
 // Public olarak Row ve Error türlerini dışa aktar
 pub use tokio_postgres::{Error, Row};
+pub use tokio_postgres::types::ToSql;

@@ -7,6 +7,7 @@ use tokio_postgres::{types::ToSql, Row, Error};
 // Kullanıcı ekleme modeli
 #[derive(Debug, Clone, Serialize, Deserialize, Insertable, DeriveSqlParams)]
 #[table("users")]
+#[returning("id")]
 pub struct UserInsert {
     pub name: String,
     pub email: String,
