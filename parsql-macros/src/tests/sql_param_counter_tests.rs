@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod sql_param_counter_tests {
-    use crate::crud_impl::SqlParamCounter;
+    use crate::{SqlParamCounter};
 
     #[test]
     fn test_counter_starts_at_one() {

@@ -20,15 +20,32 @@
 //! - `UpdateParams`: Generates parameter handling code for UPDATE operations
 //! - `FromRow`: Generates code for converting database rows to Rust structs
 
-use proc_macro::TokenStream;
+use std::env;
 
-mod crud_impl;
+use proc_macro::TokenStream;
+use syn::{parse_macro_input, DeriveInput};
+
+mod from_row;
+mod deletable;
+mod insertable;
+mod queryable;
+mod query_builder;
+mod sql_params;
 mod numbering_test;
+mod utils;
+mod update_params;
+mod updateable;
+
+
 #[path = "tests/param_numbering_tests.rs"]
 mod param_numbering_tests;
 #[path = "tests/sql_param_counter_tests.rs"]
 mod sql_param_counter_tests;
 
+mod implementations;
+
+pub(crate) use query_builder::*;
+pub(crate) use utils::*;
 /// Derive macro for generating UPDATE queries.
 /// 
 /// # Attributes
@@ -38,7 +55,7 @@ mod sql_param_counter_tests;
 #[proc_macro_derive(Updateable, attributes(table, where_clause, update))]
 pub fn derive_updateable(input: TokenStream) -> TokenStream {
     // Let's add special checks for secure parameter usage
-    crud_impl::derive_updateable_impl(input)
+    updateable::derive_updateable_impl(input)
 }
 
 /// Derive macro for generating INSERT queries.
@@ -48,7 +65,7 @@ pub fn derive_updateable(input: TokenStream) -> TokenStream {
 /// - `returning`: The column to return after insert (optional)
 #[proc_macro_derive(Insertable, attributes(table, returning, sql_type))]
 pub fn derive_insertable(input: TokenStream) -> TokenStream {
-    crud_impl::derive_insertable_impl(input)
+    insertable::derive_insertable_impl(input)
 }
 
 /// Derive macro for generating SELECT queries.
@@ -65,7 +82,7 @@ pub fn derive_insertable(input: TokenStream) -> TokenStream {
 /// - `offset`: OFFSET clause (optional)
 #[proc_macro_derive(Queryable, attributes(table, where_clause, select, join, group_by, order_by, having, limit, offset))]
 pub fn derive_queryable(input: TokenStream) -> TokenStream {
-    crud_impl::derive_queryable_impl(input)
+    queryable::derive_queryable_impl(input)
 }
 
 /// Derive macro for generating DELETE queries.
@@ -75,7 +92,7 @@ pub fn derive_queryable(input: TokenStream) -> TokenStream {
 /// - `where_clause`: The WHERE clause for the DELETE statement
 #[proc_macro_derive(Deletable, attributes(table, where_clause))]
 pub fn derive_deletable(input: TokenStream) -> TokenStream {
-    crud_impl::derive_deletable_impl(input)
+    deletable::derive_deletable_impl(input)
 }
 
 /// Derive macro for generating SQL parameter handling code.
@@ -84,7 +101,7 @@ pub fn derive_deletable(input: TokenStream) -> TokenStream {
 /// - `where_clause`: The WHERE clause containing parameter placeholders
 #[proc_macro_derive(SqlParams, attributes(where_clause))]
 pub fn derive_sql_params(input: TokenStream) -> TokenStream {
-    crud_impl::derive_sql_params_impl(input)
+    sql_params::derive_sql_params_impl(input)
 }
 
 /// Derive macro for generating UPDATE parameter handling code.
@@ -94,7 +111,7 @@ pub fn derive_sql_params(input: TokenStream) -> TokenStream {
 /// - `where_clause`: The WHERE clause containing parameter placeholders
 #[proc_macro_derive(UpdateParams, attributes(update, where_clause))]
 pub fn derive_update_params(input: TokenStream) -> TokenStream {
-    crud_impl::derive_update_params_impl(input)
+    update_params::derive_update_params_impl(input)
 }
 
 /// Derive macro for converting database rows to Rust structs.
@@ -105,23 +122,29 @@ pub fn derive_update_params(input: TokenStream) -> TokenStream {
 /// # Features
 /// - `postgres`: Generate code for PostgreSQL
 /// - `sqlite`: Generate code for SQLite
-#[proc_macro_derive(FromRow)]
-pub fn derive_from_row(input: TokenStream) -> TokenStream {
-    #[cfg(any(feature = "postgres", feature = "tokio-postgres", feature = "deadpool-postgres"))]
-    {
-        return crud_impl::derive_from_row_postgres(input);
-    }
-    #[cfg(feature = "sqlite")]
-    {
-        return crud_impl::derive_from_row_sqlite(input);
-    }
-    #[cfg(not(any(feature = "postgres", feature = "tokio-postgres", feature = "deadpool-postgres", feature = "sqlite")))]
-    {
-        panic!("At least one database feature must be enabled (postgres or sqlite)");
-    }
+
+#[cfg(feature = "sqlite")]
+#[proc_macro_derive(FromRowSqlite)]
+pub fn derive_from_row_sqlite(input: TokenStream) -> TokenStream {
+    crate::implementations::sqlite::generate_from_row(&parse_macro_input!(input as DeriveInput)).into()
 }
+
+#[cfg(any(feature = "postgres", feature = "tokio-postgres", feature = "deadpool-postgres"))]
+#[proc_macro_derive(FromRowPostgres)]
+pub fn derive_from_row_postgres(input: TokenStream) -> TokenStream {
+    crate::implementations::postgres::generate_from_row(&parse_macro_input!(input as DeriveInput)).into()
+}
+
 
 // SqlParamCounter ve number_where_clause_params fonksiyonlarını sadece test için dışa aktarıyoruz
 #[cfg(test)]
-pub(crate) use crud_impl::{SqlParamCounter, number_where_clause_params};
+pub(crate) use utils::{SqlParamCounter, number_where_clause_params};
 
+/// Log mesajlarını yazdırmak için yardımcı fonksiyon
+pub(crate) fn log_message(message: &str) {
+    if let Ok(trace) = env::var("PARSQL_TRACE") {
+        if trace == "1" {
+            println!("{}", message);
+        }
+    }
+}
