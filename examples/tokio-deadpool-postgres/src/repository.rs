@@ -1,8 +1,9 @@
 use deadpool_postgres::Pool;
 use parsql::deadpool_postgres::{delete, get, get_all, insert, select_all, update, Error};
 use tokio_postgres::Row as PgRow;
+use uuid::Uuid;
 
-use crate::models::{UserById, UserDelete, UserInsert, UserUpdate, UsersByState, UserStatusQuery};
+use crate::models::{UserById, UserDelete, UserInsert, UserUpdate, UsersByState, UserStatusQuery, InsertBlog};
 
 // Repository yapısı - Veritabanı işlemleri için
 pub struct UserRepository {
@@ -17,8 +18,8 @@ impl UserRepository {
     // Kullanıcı ekleme
     pub async fn insert_user(&self, user: UserInsert) -> Result<i64, Error> {
         // Parsql'in insert fonksiyonu, doğrudan havuzla çalışır
-        let result = insert(&self.pool, user).await?;
-        Ok(result as i64) // Eklenen satır sayısı
+        let result: i64 = insert(&self.pool, user).await?;
+        Ok(result)
     }
 
     // Kullanıcı güncelleme
@@ -107,5 +108,23 @@ pub struct UserWithStatus {
 impl std::fmt::Display for UserWithStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "ID: {}, Ad: {}, Durum: {}", self.id, self.name, self.status)
+    }
+}
+
+// Blog repository yapısı
+pub struct BlogRepository {
+    pool: Pool,
+}
+
+impl BlogRepository {
+    pub fn new(pool: Pool) -> Self {
+        Self { pool }
+    }
+
+    // Blog ekleme
+    pub async fn insert_blog(&self, blog: InsertBlog) -> Result<Uuid, Error> {
+        // Parsql'in insert fonksiyonu, doğrudan havuzla çalışır
+        let result: Uuid = insert::<InsertBlog, Uuid>(&self.pool, blog).await?;
+        Ok(result)
     }
 } 

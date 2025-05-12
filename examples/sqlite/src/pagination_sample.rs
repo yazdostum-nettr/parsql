@@ -1,19 +1,32 @@
-use parsql::macros::{Queryable, SqlParams, FromRow};
-use parsql::sqlite::{get_all, SqlQuery, SqlParams, FromRow};
-use rusqlite::{Connection, Result, Error, Row, types::ToSql, params};
+use parsql::sqlite::{
+    macros::{Queryable, SqlParams},
+    traits::{CrudOps, FromRow, SqlParams, SqlQuery},
+};
+use rusqlite::{params, types::ToSql, Connection, Result, Row};
 
 /// İlk sayfa için sorgu yapısı
-#[derive(Debug, Queryable, SqlParams, FromRow)]
+#[derive(Debug, Queryable, SqlParams)]
 #[table("users")]
 #[where_clause("state >= $")]
 #[order_by("id ASC")]
-#[limit(5)]       // Her sayfada 5 kayıt
-#[offset(0)]      // İlk sayfa (0. indeks)
+#[limit(5)] // Her sayfada 5 kayıt
+#[offset(0)] // İlk sayfa (0. indeks)
 pub struct PageOne {
     pub id: i64,
     pub name: String,
     pub email: String,
     pub state: i16,
+}
+
+impl FromRow for PageOne {
+    fn from_row(row: &Row) -> Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            email: row.get(2)?,
+            state: row.get(3)?,
+        })
+    }
 }
 
 impl PageOne {
@@ -28,17 +41,28 @@ impl PageOne {
 }
 
 /// İkinci sayfa için sorgu yapısı
-#[derive(Debug, Queryable, SqlParams, FromRow)]
+#[derive(Debug, Queryable, SqlParams)]
 #[table("users")]
 #[where_clause("state >= $")]
 #[order_by("id ASC")]
-#[limit(5)]       // Her sayfada 5 kayıt
-#[offset(5)]      // İkinci sayfa (5. kayıttan başla)
+#[limit(5)] // Her sayfada 5 kayıt
+#[offset(5)] // İkinci sayfa (5. kayıttan başla)
 pub struct PageTwo {
     pub id: i64,
     pub name: String,
     pub email: String,
     pub state: i16,
+}
+
+impl FromRow for PageTwo {
+    fn from_row(row: &Row) -> Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            email: row.get(2)?,
+            state: row.get(3)?,
+        })
+    }
 }
 
 impl PageTwo {
@@ -53,17 +77,28 @@ impl PageTwo {
 }
 
 /// Üçüncü sayfa için sorgu yapısı
-#[derive(Debug, Queryable, SqlParams, FromRow)]
+#[derive(Debug, Queryable, SqlParams)]
 #[table("users")]
 #[where_clause("state >= $")]
 #[order_by("id ASC")]
-#[limit(5)]       // Her sayfada 5 kayıt
-#[offset(10)]     // Üçüncü sayfa (10. kayıttan başla)
+#[limit(5)] // Her sayfada 5 kayıt
+#[offset(10)] // Üçüncü sayfa (10. kayıttan başla)
 pub struct PageThree {
     pub id: i64,
     pub name: String,
     pub email: String,
     pub state: i16,
+}
+
+impl FromRow for PageThree {
+    fn from_row(row: &Row) -> Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            email: row.get(2)?,
+            state: row.get(3)?,
+        })
+    }
 }
 
 impl PageThree {
@@ -78,7 +113,7 @@ impl PageThree {
 }
 
 /// Sadece aktif kullanıcıları (state=1) göstermek için sorgu yapısı
-#[derive(Debug, Queryable, SqlParams, FromRow)]
+#[derive(Debug, Queryable, SqlParams)]
 #[table("users")]
 #[where_clause("state = $")]
 #[order_by("id ASC")]
@@ -89,6 +124,17 @@ pub struct ActiveUsers {
     pub name: String,
     pub email: String,
     pub state: i16,
+}
+
+impl FromRow for ActiveUsers {
+    fn from_row(row: &Row) -> Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            email: row.get(2)?,
+            state: row.get(3)?,
+        })
+    }
 }
 
 impl ActiveUsers {
@@ -113,44 +159,52 @@ pub fn run_derive_pagination_examples(conn: &Connection) -> Result<()> {
 
     // Sayfa 1 - İlk 5 kullanıcı
     let page1 = PageOne::new(0);
-    let users_page1 = get_all(conn, &page1)?;
-    
+    let users_page1 = conn.fetch_all(&page1)?;
+
     println!("\nSayfa 1 (0-4 arası kayıtlar) - Derive Macro ile:");
     for user in &users_page1 {
-        println!("ID: {}, İsim: {}, E-posta: {}, Durum: {}", 
-                user.id, user.name, user.email, user.state);
+        println!(
+            "ID: {}, İsim: {}, E-posta: {}, Durum: {}",
+            user.id, user.name, user.email, user.state
+        );
     }
-    
+
     // Sayfa 2 - İkinci 5 kullanıcı
     let page2 = PageTwo::new(0);
-    let users_page2 = get_all(conn, &page2)?;
-    
+    let users_page2 = conn.fetch_all(&page2)?;
+
     println!("\nSayfa 2 (5-9 arası kayıtlar) - Derive Macro ile:");
     for user in &users_page2 {
-        println!("ID: {}, İsim: {}, E-posta: {}, Durum: {}", 
-                user.id, user.name, user.email, user.state);
+        println!(
+            "ID: {}, İsim: {}, E-posta: {}, Durum: {}",
+            user.id, user.name, user.email, user.state
+        );
     }
-    
+
     // Sayfa 3 - Üçüncü 5 kullanıcı
     let page3 = PageThree::new(0);
-    let users_page3 = get_all(conn, &page3)?;
-    
+    let users_page3 = conn.fetch_all(&page3)?;
+
     println!("\nSayfa 3 (10-14 arası kayıtlar) - Derive Macro ile:");
     for user in &users_page3 {
-        println!("ID: {}, İsim: {}, E-posta: {}, Durum: {}", 
-                user.id, user.name, user.email, user.state);
+        println!(
+            "ID: {}, İsim: {}, E-posta: {}, Durum: {}",
+            user.id, user.name, user.email, user.state
+        );
     }
-    
+
     // Sadece aktif kullanıcıları göster (state=1)
     println!("\nSadece aktif kullanıcılar (state=1) - Derive Macro ile:");
     let active_users_query = ActiveUsers::new();
-    let active_users = get_all(conn, &active_users_query)?;
-    
+    let active_users = conn.fetch_all(&active_users_query)?;
+
     for user in &active_users {
-        println!("ID: {}, İsim: {}, E-posta: {}, Durum: {}", 
-                user.id, user.name, user.email, user.state);
+        println!(
+            "ID: {}, İsim: {}, E-posta: {}, Durum: {}",
+            user.id, user.name, user.email, user.state
+        );
     }
-    
+
     Ok(())
 }
 
@@ -170,7 +224,7 @@ pub fn run_pagination_examples(conn: &Connection) -> Result<()> {
     let mut stmt = conn.prepare(
         "SELECT id, name, email, state FROM users WHERE state >= ? ORDER BY id ASC LIMIT 5 OFFSET 0"
     )?;
-    
+
     let users_page1 = stmt.query_map(params![&min_state], |row| {
         Ok((
             row.get::<_, i64>(0)?,
@@ -179,19 +233,22 @@ pub fn run_pagination_examples(conn: &Connection) -> Result<()> {
             row.get::<_, i16>(3)?,
         ))
     })?;
-    
+
     println!("\nSayfa 1 (0-4 arası kayıtlar):");
     for user in users_page1 {
         if let Ok((id, name, email, state)) = user {
-            println!("ID: {}, İsim: {}, E-posta: {}, Durum: {}", id, name, email, state);
+            println!(
+                "ID: {}, İsim: {}, E-posta: {}, Durum: {}",
+                id, name, email, state
+            );
         }
     }
-    
+
     // Sayfa 2 - İkinci 5 kullanıcı
     let mut stmt = conn.prepare(
         "SELECT id, name, email, state FROM users WHERE state >= ? ORDER BY id ASC LIMIT 5 OFFSET 5"
     )?;
-    
+
     let users_page2 = stmt.query_map(params![&min_state], |row| {
         Ok((
             row.get::<_, i64>(0)?,
@@ -200,19 +257,22 @@ pub fn run_pagination_examples(conn: &Connection) -> Result<()> {
             row.get::<_, i16>(3)?,
         ))
     })?;
-    
+
     println!("\nSayfa 2 (5-9 arası kayıtlar):");
     for user in users_page2 {
         if let Ok((id, name, email, state)) = user {
-            println!("ID: {}, İsim: {}, E-posta: {}, Durum: {}", id, name, email, state);
+            println!(
+                "ID: {}, İsim: {}, E-posta: {}, Durum: {}",
+                id, name, email, state
+            );
         }
     }
-    
+
     // Sayfa 3 - Üçüncü 5 kullanıcı
     let mut stmt = conn.prepare(
         "SELECT id, name, email, state FROM users WHERE state >= ? ORDER BY id ASC LIMIT 5 OFFSET 10"
     )?;
-    
+
     let users_page3 = stmt.query_map(params![&min_state], |row| {
         Ok((
             row.get::<_, i64>(0)?,
@@ -221,20 +281,23 @@ pub fn run_pagination_examples(conn: &Connection) -> Result<()> {
             row.get::<_, i16>(3)?,
         ))
     })?;
-    
+
     println!("\nSayfa 3 (10-14 arası kayıtlar):");
     for user in users_page3 {
         if let Ok((id, name, email, state)) = user {
-            println!("ID: {}, İsim: {}, E-posta: {}, Durum: {}", id, name, email, state);
+            println!(
+                "ID: {}, İsim: {}, E-posta: {}, Durum: {}",
+                id, name, email, state
+            );
         }
     }
-    
+
     // Sadece aktif kullanıcıları göster (state=1)
     let active_state: i16 = 1;
     let mut stmt = conn.prepare(
-        "SELECT id, name, email, state FROM users WHERE state = ? ORDER BY id ASC LIMIT 5"
+        "SELECT id, name, email, state FROM users WHERE state = ? ORDER BY id ASC LIMIT 5",
     )?;
-    
+
     let active_users = stmt.query_map(params![&active_state], |row| {
         Ok((
             row.get::<_, i64>(0)?,
@@ -243,13 +306,16 @@ pub fn run_pagination_examples(conn: &Connection) -> Result<()> {
             row.get::<_, i16>(3)?,
         ))
     })?;
-    
+
     println!("\nSadece aktif kullanıcılar (state=1):");
     for user in active_users {
         if let Ok((id, name, email, state)) = user {
-            println!("ID: {}, İsim: {}, E-posta: {}, Durum: {}", id, name, email, state);
+            println!(
+                "ID: {}, İsim: {}, E-posta: {}, Durum: {}",
+                id, name, email, state
+            );
         }
     }
-    
+
     Ok(())
-} 
+}

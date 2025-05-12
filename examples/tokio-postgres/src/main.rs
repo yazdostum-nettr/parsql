@@ -18,6 +18,8 @@ async fn main() {
         eprintln!(".env dosyası yüklenemedi: {}, varsayılan değerler kullanılacak", e);
     }
 
+    std::env::set_var("PARSQL_TRACE", "1");
+
     // Komut satırı argümanlarını parse et
     let args: Vec<String> = env::args().collect();
     
