@@ -1,7 +1,7 @@
+use postgres::types::FromSql;
 use tokio_postgres::{Error, Row, Client, Transaction};
 use std::sync::OnceLock;
-use crate::crud_ops::CrudOps;
-use crate::{SqlQuery, SqlParams, UpdateParams, FromRow};
+use crate::traits::{CrudOps, FromRow, SqlParams, SqlQuery, UpdateParams};
 
 /// Creates and begins a new transaction.
 /// 
@@ -435,7 +435,7 @@ where
 /// ```
 #[async_trait::async_trait]
 impl<'a> CrudOps for Transaction<'a> {
-    async fn insert<T>(&self, entity: T) -> Result<u64, Error>
+    async fn insert<T, P:for<'b> FromSql<'b> + Send + Sync>(&self, entity: T) -> Result<P, Error>
     where
         T: SqlQuery + SqlParams + Send + Sync + 'static,
     {
@@ -451,7 +451,8 @@ impl<'a> CrudOps for Transaction<'a> {
         }
 
         let params = entity.params();
-        self.execute(&sql, &params).await
+        let row = self.query_one(&sql, &params).await?;
+        row.try_get::<_, P>(0)
     }
 
     async fn update<T>(&self, entity: T) -> Result<bool, Error>

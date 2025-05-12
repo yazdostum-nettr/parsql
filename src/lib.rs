@@ -1,5 +1,3 @@
-pub use parsql_macros as macros;
-
 #[cfg(feature = "sqlite")]
 pub use parsql_sqlite as sqlite;
 

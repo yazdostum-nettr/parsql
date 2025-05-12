@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use parsql_macros::{Insertable, SqlParams};
-use parsql_tokio_postgres::{insert, SqlParams, SqlQuery};
+use parsql_tokio_postgres::{insert, traits::{SqlParams, SqlQuery}};
 use tokio_postgres::{types::ToSql, Client, NoTls};
 
 #[derive(Insertable, SqlParams)]
@@ -41,7 +41,7 @@ async fn do_parsql_insert(db: &std::cell::RefCell<Client>) {
         email: "ali@veli".to_string(),
         state: 1,
     };
-    let _ = insert(&db.borrow_mut(), insert_user).await;
+    let _ = insert::<InsertUser, i64>(&db.borrow_mut(), insert_user).await;
 }
 
 fn criterion_benchmark(c: &mut Criterion) {

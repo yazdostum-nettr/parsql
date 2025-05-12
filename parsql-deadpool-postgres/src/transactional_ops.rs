@@ -1,10 +1,10 @@
 // use parsql_core::{Deleteable, Insertable, Queryable, Updateable};
-use deadpool_postgres::{Transaction, Pool, Client};
+use deadpool_postgres::{Transaction, Client};
 use tokio_postgres::Error;
 // Makrolar sadece dokümantasyon için kullanılıyor, gerçek kodda SqlQuery kullanılmalı
 // use parsql_macros::{Insertable, Updateable};
 
-use crate::{SqlQuery, SqlParams, FromRow};
+use crate::traits::{SqlQuery, SqlParams, FromRow};
 
 /// # begin
 /// 

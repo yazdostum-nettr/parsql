@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use parsql_macros::{Insertable, FromRow, Queryable, SqlParams};
-use parsql_postgres::{ fetch, fetch_all, insert, FromRow, SqlParams, SqlQuery};
-use postgres::{types::ToSql, Client, NoTls, Row, Error};
+use parsql_macros::{FromRowPostgres as FromRow, Insertable, Queryable, SqlParams};
+use parsql_postgres::traits::{CrudOps, FromRow, SqlParams, SqlQuery};
+use postgres::{types::ToSql, Client, Error, NoTls, Row};
 
 #[derive(Insertable, SqlParams)]
 #[table("users")]
@@ -14,7 +14,7 @@ pub struct InsertUser {
 #[derive(Queryable, FromRow, SqlParams)]
 #[table("users")]
 #[where_clause("id = $")]
-pub struct GetUser{
+pub struct GetUser {
     pub id: i32,
     pub name: String,
     pub email: String,
@@ -50,7 +50,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 email: "SampleEmail".to_string(),
                 state: 1,
             });
-            let _ = insert(&mut db, user);
+            let _ = db.insert::<InsertUser, i64>(user);
         })
     });
 
@@ -62,7 +62,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 email: "SampleEmail".to_string(),
                 state: 1,
             });
-            let _ = fetch(&mut db, &user);
+            let _ = db.fetch::<GetUser>(&user);
         })
     });
 }
