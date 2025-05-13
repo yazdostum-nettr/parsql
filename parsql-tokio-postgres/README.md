@@ -56,23 +56,7 @@ Cargo.toml dosyanıza şu şekilde ekleyin:
 ```toml
 [dependencies]
 # Tokio PostgreSQL için
-parsql = { version = "0.3.7", features = ["tokio-postgres"] }
-
-# Deadpool PostgreSQL için
-parsql = { version = "0.3.7", features = ["deadpool-postgres"] }
-```
-
-veya doğrudan bu paketi kullanmak isterseniz:
-
-```toml
-[dependencies]
-parsql-tokio-postgres = "0.3.2"
-parsql-macros = "0.3.2"
-tokio-postgres = "0.7.13"
-tokio = { version = "1.41.1", features = ["full"] }
-
-# Deadpool kullanmak isterseniz
-deadpool-postgres = "0.14.1"
+parsql = { version = "0.4.0", features = ["tokio-postgres"] }
 ```
 
 ## Temel Kullanım
@@ -204,10 +188,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Veri Okuma (Get) İşlemi
 
 ```rust
-use parsql::{
-    core::Queryable,
+use parsql::tokio_postgres::{
     macros::{FromRow, Queryable, SqlParams},
-    tokio_postgres::{FromRow, SqlParams, get, CrudOps},
+    traits::{FromRow, SqlParams, SqlQuery},
 };
 use tokio_postgres::{types::ToSql, Row};
 
@@ -261,10 +244,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Veri Ekleme (Insert) İşlemi
 
 ```rust
-use parsql::{
-    core::Insertable,
+use parsql::tokio_postgres::{
     macros::{Insertable, SqlParams},
-    tokio_postgres::{SqlParams, insert, CrudOps},
+    traits::{SqlParams, SqlQuery},
 };
 use tokio_postgres::types::ToSql;
 
@@ -315,11 +297,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Veri Güncelleme (Update) İşlemi
 
 ```rust
-use parsql::{
-    core::Updateable,
+use parsql::tokio_postgres::{
     macros::{UpdateParams, Updateable},
-    tokio_postgres::{UpdateParams, update, CrudOps},
+    traits::{SqlQuery, UpdateParams},
 };
+use tokio_postgres::types::ToSql;
 
 #[derive(Updateable, UpdateParams)]
 #[table("users")]
@@ -356,8 +338,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // veya extension metot yaklaşımı
     let update_user = UpdateUser {
         id: 2,
-        name: "Ayşe Kaya".to_string(),
-        email: "ayse.kaya@parsql.com".to_string(),
+        name: "Aslan Kaya".to_string(),
+        email: "aslan.kaya@parsql.com".to_string(),
     };
     let update_result = client.update(update_user).await?;
     
@@ -370,11 +352,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Veri Silme (Delete) İşlemi
 
 ```rust
-use parsql::{
-    core::Deletable,
+use parsql::tokio_postgres::{
     macros::{Deletable, SqlParams},
-    tokio_postgres::{SqlParams, delete, CrudOps},
+    traits::{SqlParams, SqlQuery},
 };
+use tokio_postgres::{types::ToSql, Client};
 
 #[derive(Deletable, SqlParams)]
 #[table("users")]

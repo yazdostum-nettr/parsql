@@ -1,9 +1,9 @@
-use parsql::sqlite::crud_ops::get;
-use parsql::sqlite::traits::CrudOps;
-use parsql::sqlite::{delete, insert, update};
 use parsql::sqlite::{
+    crud_ops::get,
+    delete, insert,
     macros::{Deletable, Insertable, Queryable, SqlParams, UpdateParams, Updateable},
-    traits::{FromRow, SqlParams, SqlQuery, UpdateParams},
+    traits::{CrudOps, FromRow, SqlParams, SqlQuery, UpdateParams},
+    update,
 };
 use rusqlite::{Connection, Error, Result};
 

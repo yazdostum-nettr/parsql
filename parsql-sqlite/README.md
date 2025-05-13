@@ -51,15 +51,7 @@ Cargo.toml dosyanıza şu şekilde ekleyin:
 
 ```toml
 [dependencies]
-parsql = { version = "0.3.7", features = ["sqlite"] }
-```
-
-veya doğrudan bu paketi kullanmak isterseniz:
-
-```toml
-[dependencies]
-parsql-sqlite = "0.3.7"
-parsql-macros = "0.3.7"
+parsql = { version = "0.4.0", features = ["sqlite"] }
 ```
 
 ## Kullanım
@@ -97,9 +89,15 @@ fn main() -> Result<()> {
 ### Fonksiyon Tabanlı Yaklaşım
 
 ```rust
-use rusqlite::{Connection, Result};
-use parsql::sqlite::{fetch, insert};
-use parsql::macros::{Insertable, SqlParams, Queryable, FromRow};
+use parsql::sqlite::{
+    macros::{FromRow, Insertable, Queryable, SqlParams},
+    traits::{FromRow, SqlParams, SqlQuery},
+};
+use rusqlite::{
+    Connection,
+    types::{FromSql, ToSql},
+    Error, Result, Row,
+};
 
 #[derive(Insertable, SqlParams)]
 #[table("users")]
@@ -143,9 +141,15 @@ fn main() -> Result<()> {
 ### Extension Metot Yaklaşımı (CrudOps Trait)
 
 ```rust
-use rusqlite::{Connection, Result};
-use parsql::sqlite::CrudOps;  // CrudOps trait'ini içe aktar
-use parsql::macros::{Insertable, SqlParams, Queryable, FromRow};
+use parsql::sqlite::{
+    macros::{FromRow, Insertable, Queryable, SqlParams},
+    traits::{FromRow, SqlParams, SqlQuery},
+};
+use rusqlite::{
+    Connection,
+    types::{FromSql, ToSql},
+    Error, Result, Row,
+};
 
 #[derive(Insertable, SqlParams)]
 #[table("users")]
@@ -197,9 +201,11 @@ Parsql-sqlite, transaction işlemleri için iki farklı yaklaşım sunar:
 
 ```rust
 use rusqlite::{Connection, Result};
-use parsql::sqlite::CrudOps;
-use parsql::sqlite::transactional;
-use parsql::macros::{Insertable, SqlParams, Queryable, FromRow};
+use parsql::{
+    sqlite::CrudOps,
+    macros::{Insertable, SqlParams, Queryable, FromRow},
+    transactional
+};
 
 #[derive(Insertable, SqlParams)]
 #[table("users")]

@@ -1,7 +1,6 @@
 use parsql::tokio_postgres::{
     get_all,
-    macros::FromRow,
-    macros::{Queryable, SqlParams},
+    macros::{FromRow, Queryable, SqlParams},
     traits::{FromRow, SqlParams, SqlQuery},
 };
 use tokio_postgres::{types::ToSql, Client, Error, Row};

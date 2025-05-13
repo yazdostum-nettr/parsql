@@ -52,16 +52,7 @@ Add to your Cargo.toml file as follows:
 
 ```toml
 [dependencies]
-parsql = { version = "0.3.7", features = ["postgres"] }
-```
-
-or if you want to use this package directly:
-
-```toml
-[dependencies]
-parsql-postgres = "0.3.2"
-parsql-macros = "0.3.2"
-postgres = "0.19"
+parsql = { version = "0.4.0", features = ["postgres"] }
 ```
 
 ## Usage
@@ -99,7 +90,7 @@ fn main() -> Result<(), postgres::Error> {
         name: "John".to_string(),
         email: "john@example.com".to_string(),
     };
-    let rows_affected = insert(&mut client, insert_user)?;
+    let inserted_record_id = client.insert::<InsertUser, i64>(insert_user)?;
     
     // Getting a user with the function approach
     let get_user = GetUser {
@@ -147,7 +138,7 @@ fn main() -> Result<(), postgres::Error> {
         name: "John".to_string(),
         email: "john@example.com".to_string(),
     };
-    let rows_affected = client.insert(insert_user)?;
+    let rows_affected = client.insert::<InsertUser, i64>(insert_user)?;
     
     // Getting a user with the extension method approach
     let get_user = GetUser {
@@ -238,7 +229,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Usage
     let get_user = GetUser::new(1);
-    let get_result = get(&mut client, get_user)?;
+    let get_result = client.fetch(get_user)?;
     
     println!("User: {:?}", get_result);
     Ok(())
@@ -275,7 +266,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         state: 1,
     };
     
-    let insert_result = insert(&mut client, insert_user)?;
+    let insert_result = client.insert::<InsertUser, i64>(&mut client, insert_user)?;
     println!("Inserted record ID: {}", insert_result);
     
     Ok(())
@@ -316,7 +307,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         state: 2,
     };
     
-    let result = update(&mut client, update_user)?;
+    let result = client.update(update_user)?;
     println!("Number of records updated: {}", result);
     
     Ok(())
@@ -347,7 +338,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     
     let delete_user = DeleteUser { id: 1 };
-    let result = delete(&mut client, delete_user)?;
+    let result = client.delete(delete_user)?;
     
     println!("Number of records deleted: {}", result);
     Ok(())

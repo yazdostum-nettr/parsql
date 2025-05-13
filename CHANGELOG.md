@@ -2,7 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.3.7] - 2025-03-22
+## [0.4.0] - 2025-05-12
+
+### 🚀 Features
+
+- Insert edilen kaydın id bilgisinin geri döndürülmesini sağlayacak çalışmada sql kodu üretimi aşaması tamamlandı. Ancak çözülmesi gereken bazı problemler var.
 
 ### 🐛 Bug Fixes
 
@@ -32,6 +36,10 @@ All notable changes to this project will be documented in this file.
 - Türkçe ve İngilizce belgeler senkronize edildi
 
 Geriye dönük uyumluluk korunduğu için mevcut kodların çalışmaya devam etmesi garanti edilmiştir.
+- Prosedürel makroların bulunduğu proje daha modüler bir hale getirildi.
+- Insert işlemi neticesinde geri döndürülen id'nin tipi generic hale getirilerek, farklı türden id'ler için destek sağlayacak hale getirildi. modülerlik üzerine; makroların re-export edilme yolu, ilgili veritabanı için olan 'feature flag' üzerinden olacak şekilde güncellendi.
+- 'examples' klasörü altındaki projelerdeki örnekler, yeni geliştirmelere uyumlu hale getirildi.
+- Versiyon 0.3.7'den 0.4.0'a yükseltildi.
 
 ### 📚 Documentation
 
@@ -44,6 +52,7 @@ Geriye dönük uyumluluk korunduğu için mevcut kodların çalışmaya devam et
 - *(release)* Deadpool-postgres için export durumundan kaynaklı versiyon yükseltme.
 - *(release)* Versiyon problemleri...
 - *(release)* Yayınlama öncesi versiyon için dökümantasyon düzenleme çalışmaları.
+- *(release)* CHANGELOG.md güncellemesi.
 
 ## [0.3.4] - 2025-03-14
 
