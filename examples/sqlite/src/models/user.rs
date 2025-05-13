@@ -1,12 +1,16 @@
-use parsql::{
-    macros::{FromRow, Insertable, Queryable, SqlParams, UpdateParams, Updateable, Deletable},
-    sqlite::{FromRow, SqlParams, UpdateParams, SqlQuery},
+use parsql::sqlite::{
+    macros::{Deletable, FromRow, Insertable, Queryable, SqlParams, UpdateParams, Updateable},
+    traits::{FromRow, SqlParams, SqlQuery, UpdateParams},
 };
-use rusqlite::{Result, Error, Row, types::ToSql};
+use rusqlite::{
+    types::{FromSql, ToSql},
+    Error, Result, Row,
+};
 
 /// Kullanıcı ekleme için struct
-#[derive(Insertable, SqlParams)]
+#[derive(Insertable, SqlParams, FromRow, Debug)]
 #[table("users")]
+#[returning("id")]
 pub struct InsertUser {
     pub name: String,
     pub email: String,
@@ -53,4 +57,4 @@ pub struct GetUserByName {
 #[where_clause("id = $")]
 pub struct DeleteUser {
     pub id: i64,
-} 
+}

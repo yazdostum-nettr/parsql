@@ -174,6 +174,10 @@
 
 pub mod crud_ops;
 pub mod transactional_ops;
+pub mod traits;
+pub mod macros;
+
+pub use macros::*;
 
 // Re-export sqlite types that might be needed
 pub use rusqlite::{Connection, Error, Row};
@@ -188,46 +192,7 @@ pub use crud_ops::{
     delete, 
     fetch, 
     fetch_all,
-    CrudOps,
 };
 
 // Re-export transaction operations
 pub use transactional_ops as transactional;
-
-pub use parsql_macros as macros;
-
-/// Trait for generating SQL queries.
-/// This trait is implemented by the derive macro `Queryable`, `Insertable`, `Updateable`, and `Deletable`.
-pub trait SqlQuery {
-    /// Returns the SQL query string.
-    fn query() -> String;
-}
-
-/// Trait for providing SQL parameters.
-/// This trait is implemented by the derive macro `SqlParams`.
-pub trait SqlParams {
-    /// Returns a vector of references to SQL parameters.
-    fn params(&self) -> Vec<&(dyn ToSql + Sync)>;
-}
-
-/// Trait for providing UPDATE parameters.
-/// This trait is implemented by the derive macro `UpdateParams`.
-pub trait UpdateParams {
-    /// Returns a vector of references to SQL parameters for UPDATE operations.
-    fn params(&self) -> Vec<&(dyn ToSql + Sync)>;
-}
-
-/// Trait for converting database rows to Rust structs.
-/// This trait is implemented by the derive macro `FromRow`.
-pub trait FromRow {
-    /// Converts a database row to a Rust struct.
-    /// 
-    /// # Arguments
-    /// * `row` - A reference to a database row
-    /// 
-    /// # Returns
-    /// * `Result<Self, Error>` - The converted struct or an error
-    fn from_row(row: &Row) -> Result<Self, Error>
-    where
-        Self: Sized;
-}

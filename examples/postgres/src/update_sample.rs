@@ -1,6 +1,6 @@
-use parsql::{
+use parsql::postgres::{
     macros::{UpdateParams, Updateable},
-    postgres::{SqlQuery, UpdateParams},
+    traits::{SqlQuery, UpdateParams},
 };
 use postgres::types::ToSql;
 

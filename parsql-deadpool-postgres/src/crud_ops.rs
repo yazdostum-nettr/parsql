@@ -1,6 +1,8 @@
 use deadpool_postgres::{Pool, PoolError};
-use tokio_postgres::{Error, Row};
-use crate::{SqlQuery, SqlParams, UpdateParams, FromRow};
+use postgres::types::FromSqlOwned;
+//use postgres::types::FromSql;
+use tokio_postgres::{Error, Row, types::FromSql};
+use crate::traits::{SqlQuery, SqlParams, UpdateParams, FromRow};
 
 // Daha basit bir yaklaşım: PoolError'dan genel bir Error oluştur
 fn pool_err_to_io_err(e: PoolError) -> Error {
@@ -23,7 +25,7 @@ fn pool_err_to_io_err(e: PoolError) -> Error {
 /// - `entity`: Eklenecek veri nesnesi (SqlQuery ve SqlParams trait'lerini uygulamalıdır)
 /// 
 /// ## Dönüş Değeri
-/// - `Result<u64, Error>`: Başarılı olursa, eklenen kayıt sayısını döndürür; başarısız olursa, Error döndürür
+/// - `Result<i64, Error>`: Başarılı olursa, eklenen kayıt ID'sini döndürür; başarısız olursa, Error döndürür
 /// 
 /// ## Yapı Tanımı
 /// Bu fonksiyonla kullanılan yapılar aşağıdaki derive makrolarıyla işaretlenmelidir:
@@ -75,19 +77,40 @@ fn pool_err_to_io_err(e: PoolError) -> Error {
 ///     Ok(())
 /// }
 /// ```
-pub async fn insert<T: SqlQuery + SqlParams>(
+// pub async fn insert<T: SqlQuery + SqlParams, P:for<'a> FromSql<'a> + Send + Sync>(
+//     pool: &Pool,
+//     entity: T,
+// ) -> Result<P, Error> {
+//     let client = pool.get().await.map_err(pool_err_to_io_err)?;
+//     let sql = T::query();
+    
+//     if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
+//         println!("[PARSQL-TOKIO-POSTGRES-POOL] Execute SQL: {}", sql);
+//     }
+
+//     let params = entity.params();
+//     let row = client.query_one(&sql, &params).await?;
+//     row.try_get::<_, P>(0)
+// }
+
+pub async fn insert<T, P>(
     pool: &Pool,
     entity: T,
-) -> Result<u64, Error> {
+) -> Result<P, Error>
+where
+    T: SqlQuery + SqlParams,
+    P: FromSqlOwned + Send + Sync,
+{
     let client = pool.get().await.map_err(pool_err_to_io_err)?;
     let sql = T::query();
-    
+
     if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
         println!("[PARSQL-TOKIO-POSTGRES-POOL] Execute SQL: {}", sql);
     }
 
     let params = entity.params();
-    client.execute(&sql, &params).await
+    let row = client.query_one(&sql, &params).await?;
+    row.try_get::<_, P>(0)
 }
 
 /// # update

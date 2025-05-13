@@ -8,8 +8,8 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
-rusqlite = { version = "0.34.0" }
-# parsql-macros = { version = "0.3.2", features = ["sqlite"] }
+rusqlite = { version = "0.35.0", features = ["bundled"] }
+# parsql-macros = { version = "0.4.0", features = ["sqlite"] }
 
 [dependencies.parsql-macros]
 workspace = true

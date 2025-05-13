@@ -34,23 +34,7 @@ Cargo.toml dosyanıza şu şekilde ekleyin:
 
 ```toml
 [dependencies]
-parsql-macros = "0.3.7"
-```
-
-ve özellik seçimini yapın:
-
-```toml
-# SQLite için
-parsql-macros = { version = "0.3.7", features = ["sqlite"] }
-
-# PostgreSQL için
-parsql-macros = { version = "0.3.7", features = ["postgres"] }
-
-# Tokio PostgreSQL için
-parsql-macros = { version = "0.3.7", features = ["tokio-postgres"] }
-
-# Deadpool PostgreSQL için
-parsql-macros = { version = "0.3.7", features = ["deadpool-postgres"] }
+parsql-macros = "0.4.0"
 ```
 
 ## Güvenlik Özellikleri

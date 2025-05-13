@@ -102,6 +102,8 @@
 //! ```
 
 pub mod crud_ops;
+pub mod traits;
+pub mod macros;
 
 /// Transaction support module 
 /// 
@@ -154,10 +156,9 @@ pub mod transaction_ops;
 
 // Re-export tokio-postgres types that might be needed
 pub use tokio_postgres::{types::ToSql, Row, Error, Client};
-
+pub use macros::*;
 // Re-export crud operations
 pub use crate::crud_ops::{
-    CrudOps,
     insert,
     update,
     delete,
@@ -173,8 +174,6 @@ pub use crate::crud_ops::{
     get,
     get_all
 };
-
-pub use parsql_macros as macros;
 
 /// Re-export transaction modules
 /// 
@@ -192,38 +191,3 @@ pub use parsql_macros as macros;
 /// - `tx_get_all`: (Deprecated) Get multiple records within a transaction
 pub use transaction_ops as transactional;
 
-/// Trait for generating SQL queries.
-/// This trait is implemented by the derive macro `Queryable`, `Insertable`, `Updateable`, and `Deletable`.
-pub trait SqlQuery {
-    /// Returns the SQL query string.
-    fn query() -> String;
-}
-
-/// Trait for providing SQL parameters.
-/// This trait is implemented by the derive macro `SqlParams`.
-pub trait SqlParams {
-    /// Returns a vector of references to SQL parameters.
-    fn params(&self) -> Vec<&(dyn ToSql + Sync)>;
-}
-
-/// Trait for providing UPDATE parameters.
-/// This trait is implemented by the derive macro `UpdateParams`.
-pub trait UpdateParams {
-    /// Returns a vector of references to SQL parameters for UPDATE operations.
-    fn params(&self) -> Vec<&(dyn ToSql + Sync)>;
-}
-
-/// Trait for converting database rows to Rust structs.
-/// This trait is implemented by the derive macro `FromRow`.
-pub trait FromRow {
-    /// Converts a database row to a Rust struct.
-    /// 
-    /// # Arguments
-    /// * `row` - A reference to a database row
-    /// 
-    /// # Returns
-    /// * `Result<Self, Error>` - The converted struct or an error
-    fn from_row(row: &Row) -> Result<Self, Error>
-    where
-        Self: Sized;
-}

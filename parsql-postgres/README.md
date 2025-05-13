@@ -52,16 +52,7 @@ Cargo.toml dosyanıza şu şekilde ekleyin:
 
 ```toml
 [dependencies]
-parsql = { version = "0.3.7", features = ["postgres"] }
-```
-
-veya doğrudan bu paketi kullanmak isterseniz:
-
-```toml
-[dependencies]
-parsql-postgres = "0.3.2"
-parsql-macros = "0.3.2"
-postgres = "0.19"
+parsql = { version = "0.4.0", features = ["postgres"] }
 ```
 
 ## Kullanım
@@ -71,9 +62,11 @@ parsql-postgres ile çalışmak için iki farklı yaklaşım kullanabilirsiniz:
 ### 1. Fonksiyon Tabanlı Yaklaşım
 
 ```rust
-use postgres::{Client, NoTls};
-use parsql::postgres::{get, insert};
-use parsql::macros::{Insertable, SqlParams, Queryable, FromRow};
+use parsql::postgres::{
+    macros::{Insertable, SqlParams, Queryable, FromRow},
+    traits::{SqlParams, SqlQuery},
+};
+use postgres::{Client, NoTls, types::ToSql};
 
 #[derive(Insertable, SqlParams)]
 #[table("users")]
@@ -84,7 +77,7 @@ struct InsertUser {
 
 #[derive(Queryable, FromRow, SqlParams)]
 #[table("users")]
-#[where_clause("id = $1")]
+#[where_clause("id = $")]
 struct GetUser {
     id: i32,
     name: String,
@@ -99,7 +92,7 @@ fn main() -> Result<(), postgres::Error> {
         name: "John".to_string(),
         email: "john@example.com".to_string(),
     };
-    let rows_affected = insert(&mut client, insert_user)?;
+    let inserted_record_id = client.insert::<InsertUser, i64>(insert_user)?;
     
     // Fonksiyon yaklaşımı ile kullanıcı getirme
     let get_user = GetUser {
@@ -107,7 +100,7 @@ fn main() -> Result<(), postgres::Error> {
         name: String::new(),
         email: String::new(),
     };
-    let user = get(&mut client, &get_user)?;
+    let user = client.fetch(&get_user)?;
     
     println!("Kullanıcı: {:?}", user);
     Ok(())
@@ -119,9 +112,12 @@ fn main() -> Result<(), postgres::Error> {
 Bu yaklaşımda, `CrudOps` trait'i sayesinde CRUD işlemlerini doğrudan `Client` nesnesi üzerinden çağırabilirsiniz:
 
 ```rust
-use postgres::{Client, NoTls};
-use parsql::postgres::CrudOps;  // CrudOps trait'ini içe aktar
-use parsql::macros::{Insertable, SqlParams, Queryable, FromRow};
+use parsql::postgres::{
+    CrudOps,
+    macros::{Insertable, SqlParams, Queryable, FromRow},
+    traits::{SqlParams, SqlQuery},
+};
+use postgres::{Client, NoTls, types::ToSql};
 
 #[derive(Insertable, SqlParams)]
 #[table("users")]
@@ -147,7 +143,7 @@ fn main() -> Result<(), postgres::Error> {
         name: "John".to_string(),
         email: "john@example.com".to_string(),
     };
-    let rows_affected = client.insert(insert_user)?;
+    let inserted_record_id = client.insert::<InsertUser, i64>(insert_user)?;
     
     // Extension metot yaklaşımı ile kullanıcı getirme
     let get_user = GetUser {
@@ -202,12 +198,11 @@ fn main() -> Result<(), Error> {
 ### Veri Okuma (Get) İşlemi
 
 ```rust
-use parsql::{
-    core::Queryable,
-    macros::{FromRow, Queryable, SqlParams},
-    postgres::{FromRow, SqlParams, get},
+use parsql::postgres::{
+    macros::{Queryable, SqlParams, FromRow},
+    traits::{FromRow, SqlParams, SqlQuery},
 };
-use postgres::{types::ToSql, Row};
+use postgres::{types::ToSql, Error, Row};
 
 #[derive(Queryable, FromRow, SqlParams, Debug)]
 #[table("users")]
@@ -238,7 +233,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Kullanımı
     let get_user = GetUser::new(1);
-    let get_result = get(&mut client, get_user)?;
+    let get_result = client.fetch(get_user)?;
     
     println!("Kullanıcı: {:?}", get_result);
     Ok(())
@@ -326,7 +321,7 @@ fn main() -> Result<(), postgres::Error> {
         name: "Ali".to_string(),
         email: "ali@example.com".to_string(),
     };
-    let rows_affected = tx.insert(insert_user)?;
+    let inserted_record_id = tx.insert(insert_user)?;
     
     let update_user = UpdateUser {
         id: 1,
@@ -345,9 +340,12 @@ fn main() -> Result<(), postgres::Error> {
 Bu yaklaşımda, `transactional` modülündeki yardımcı fonksiyonları kullanarak method chaining yaklaşımıyla işlemlerinizi gerçekleştirebilirsiniz:
 
 ```rust
-use postgres::{Client, NoTls};
-use parsql::postgres::transactional::{begin, tx_insert, tx_update};
-use parsql::macros::{Insertable, SqlParams, Updateable, UpdateParams};
+use parsql::postgres::{
+    macros::{FromRow, Insertable, Queryable, SqlParams, UpdateParams, Updateable},
+    traits::{CrudOps, FromRow, SqlParams, SqlQuery, UpdateParams},
+    transactional::{begin, tx_insert, tx_update},
+};
+use postgres::{types::ToSql, Client, Error, Row};
 
 #[derive(Insertable, SqlParams)]
 #[table("users")]
@@ -377,14 +375,14 @@ fn main() -> Result<(), postgres::Error> {
         email: "ali@example.com".to_string(),
     };
     
-    let (tx, _) = tx_insert(tx, insert_user)?;
+    let (tx, _) = tx.tx_insert(tx, insert_user)?;
     
     let update_user = UpdateUser {
         id: 1,
         email: "ali.updated@example.com".to_string(),
     };
     
-    let (tx, _) = tx_update(tx, update_user)?;
+    let (tx, _) = tx.tx_update(tx, update_user)?;
     
     // Transaction'ı tamamla
     tx.commit()?;

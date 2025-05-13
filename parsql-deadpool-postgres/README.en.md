@@ -56,8 +56,7 @@ Add to your Cargo.toml file as follows:
 ```toml
 [dependencies]
 # For Deadpool PostgreSQL
-parsql-deadpool-postgres = "0.3.7"
-parsql-macros = "0.3.7"
+parsql = { version = "0.4.0", features = ["deadpool-postgres"] }
 deadpool-postgres = "0.14"
 tokio-postgres = "0.7"
 tokio = { version = "1", features = ["full"] }

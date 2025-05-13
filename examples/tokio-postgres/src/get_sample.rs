@@ -1,27 +1,29 @@
-use parsql::macros::Queryable;
-use parsql::tokio_postgres::{SqlQuery, SqlParams, FromRow};
-use tokio_postgres::{types::ToSql, Row, Error};
+use parsql::tokio_postgres::{
+    macros::Queryable,
+    traits::{FromRow, SqlParams, SqlQuery},
+};
+use tokio_postgres::{types::ToSql, Error, Row};
 
 /// # GetUser
-/// 
+///
 /// Data model used for querying a user by ID.
-/// 
+///
 /// ## Attributes
 /// - `#[derive(Queryable<PostgreSql>)]`: Makes this type support query generation
 /// - `#[table("users")]`: Specifies that this model will be used with the 'users' table.
 /// - `#[where_clause("id = $")]`: Specifies that the query will run with the 'WHERE id = ?' condition.
-/// 
+///
 /// ## Fields
 /// - `id`: ID of the user to query
 /// - `name`: User's name
 /// - `email`: User's email address
 /// - `state`: User's status
-/// 
+///
 /// ## Usage
 /// ```rust
 /// // Query user with ID 1
 /// let get_user = GetUser::new(1_i32);
-/// 
+///
 /// // Retrieve from database
 /// let get_result = get(&client, &get_user).await;
 /// println!("Get result: {:?}", get_result);
@@ -65,14 +67,14 @@ impl FromRow for GetUser {
 }
 
 /// # GetAllUsers
-/// 
+///
 /// Data model used for querying users by email address.
-/// 
+///
 /// ## Attributes
 /// - `#[derive(Queryable<PostgreSql>)]`: Makes this type support query generation
 /// - `#[table("users")]`: Specifies that this model will be used with the 'users' table.
 /// - `#[where_clause("email = $")]`: Specifies that the query will run with the 'WHERE email = ?' condition.
-/// 
+///
 /// ## Usage
 /// ```rust
 /// // Query users by email address
@@ -82,7 +84,7 @@ impl FromRow for GetUser {
 ///     email: "example@example.com".to_string(),
 ///     state: 0,
 /// };
-/// 
+///
 /// let users = get_all(&client, &user_by_email).await;
 /// ```
 #[derive(Queryable, Debug)]
@@ -113,9 +115,9 @@ impl FromRow for GetAllUsers {
 }
 
 /// # SelectUserWithPosts
-/// 
+///
 /// Complex data model used for querying a user with their posts and comments.
-/// 
+///
 /// ## Attributes
 /// - `#[derive(Queryable<PostgreSql>)]`: Makes this type support query generation
 /// - `#[table("users")]`: Specifies that the main table is 'users'.
@@ -123,7 +125,7 @@ impl FromRow for GetAllUsers {
 /// - `#[join("INNER JOIN posts...")]`: Adds posts table with INNER JOIN to the users table.
 /// - `#[join("LEFT JOIN comments...")]`: Adds comments table with LEFT JOIN to the posts table.
 /// - `#[where_clause("users.id = $")]`: Specifies that the query will run with the 'WHERE users.id = ?' condition.
-/// 
+///
 /// ## Fields
 /// - `id`: User's ID
 /// - `name`: User's name
@@ -133,13 +135,13 @@ impl FromRow for GetAllUsers {
 /// - `content`: Post content
 /// - `post_state`: Post status
 /// - `comment`: Comment on the post (if any)
-/// 
+///
 /// ## Usage
 /// ```rust
 /// // Query user with ID 1 including their posts and comments
 /// let select_user_with_posts = SelectUserWithPosts::new(1_i32);
 /// let get_user_with_posts = get_all(&client, &select_user_with_posts).await;
-/// 
+///
 /// println!("Get user with posts: {:?}", get_user_with_posts);
 /// ```
 #[derive(Queryable, Debug)]
@@ -196,10 +198,10 @@ impl FromRow for SelectUserWithPosts {
 }
 
 /// # UserStateStats
-/// 
+///
 /// Data model used for querying user statistics by status.
 /// Demonstrates GROUP BY and ORDER BY capabilities.
-/// 
+///
 /// ## Attributes
 /// - `#[derive(Queryable<PostgreSql>)]`: Makes this type support query generation
 /// - `#[table("users")]`: Specifies that the main table is 'users'.
@@ -207,7 +209,7 @@ impl FromRow for SelectUserWithPosts {
 /// - `#[where_clause("state > $")]`: Filters states greater than the specified value.
 /// - `#[group_by("users.state")]`: Groups results by user state.
 /// - `#[order_by("user_count DESC")]`: Orders by user count in descending order.
-/// 
+///
 /// ## Usage
 /// ```rust
 /// // Query user state statistics for states greater than 0
@@ -250,19 +252,19 @@ impl FromRow for UserStateStats {
 }
 
 /// # UserPostStats
-/// 
+///
 /// Data model used for querying statistics about users and posts by status.
 /// Demonstrates JOIN with GROUP BY and ORDER BY capabilities.
-/// 
+///
 /// ## Attributes
 /// - `#[table("users")]`: Specifies that the main table is 'users'.
-/// - `#[select("users.state, posts.state as post_state, COUNT(posts.id) as post_count")]`: 
+/// - `#[select("users.state, posts.state as post_state, COUNT(posts.id) as post_count")]`:
 ///    Selects user state, post state, and counts posts.
 /// - `#[join("LEFT JOIN posts ON users.id = posts.user_id")]`: Adds posts table with LEFT JOIN to the users table.
 /// - `#[where_clause("users.state > $")]`: Filters users with states greater than the specified value.
 /// - `#[group_by("users.state, posts.state")]`: Groups results by user state and post state.
 /// - `#[order_by("post_count DESC")]`: Orders by post count in descending order.
-/// 
+///
 /// ## Usage
 /// ```rust
 /// // Query post statistics for users with states greater than 0
@@ -309,9 +311,9 @@ impl FromRow for UserPostStats {
 }
 
 /// # UserStateStatsFiltered
-/// 
+///
 /// User state statistics query with HAVING filter.
-/// 
+///
 /// ## Attributes
 /// - `#[table("users")]`: Specifies that the main table is 'users'.
 /// - `#[select("users.state, COUNT(*) as user_count")]`: Counts users for each state.
@@ -319,7 +321,7 @@ impl FromRow for UserPostStats {
 /// - `#[group_by("users.state")]`: Groups results by user state.
 /// - `#[having("COUNT(*) > 1")]`: Filters groups with count greater than 1.
 /// - `#[order_by("user_count DESC")]`: Orders by user count in descending order.
-/// 
+///
 /// ## Usage
 /// ```rust
 /// // Query user state statistics with HAVING filter
@@ -363,19 +365,19 @@ impl FromRow for UserStateStatsFiltered {
 }
 
 /// # UserPostStatsAdvanced
-/// 
+///
 /// Advanced query model demonstrating JOIN, GROUP BY, and HAVING filtering capabilities.
-/// 
+///
 /// ## Attributes
 /// - `#[table("users")]`: Specifies that the main table is 'users'.
-/// - `#[select("users.state, posts.state as post_state, COUNT(posts.id) as post_count, AVG(posts.id)::REAL as avg_post_id")]`: 
+/// - `#[select("users.state, posts.state as post_state, COUNT(posts.id) as post_count, AVG(posts.id)::REAL as avg_post_id")]`:
 ///    Selects user state, post state, post count, and average post ID.
 /// - `#[join("LEFT JOIN posts ON users.id = posts.user_id")]`: Adds posts table with LEFT JOIN to the users table.
 /// - `#[where_clause("users.state > $")]`: Filters users with states greater than the specified value.
 /// - `#[group_by("users.state, posts.state")]`: Groups results by user state and post state.
 /// - `#[having("COUNT(posts.id) > 0 AND AVG(posts.id) > 2")]`: Filters groups with post count greater than 0 and average post ID greater than 2.
 /// - `#[order_by("post_count DESC")]`: Orders by post count in descending order.
-/// 
+///
 /// ## Usage
 /// ```rust
 /// // Create advanced filtered query with HAVING and AVG functions

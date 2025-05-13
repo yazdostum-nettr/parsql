@@ -34,23 +34,7 @@ Add to your Cargo.toml file as follows:
 
 ```toml
 [dependencies]
-parsql-macros = "0.3.2"
-```
-
-and select the feature you need:
-
-```toml
-# For SQLite
-parsql-macros = { version = "0.3.7", features = ["sqlite"] }
-
-# For PostgreSQL
-parsql-macros = { version = "0.3.7", features = ["postgres"] }
-
-# For Tokio PostgreSQL
-parsql-macros = { version = "0.3.7", features = ["tokio-postgres"] }
-
-# For Deadpool PostgreSQL
-parsql-macros = { version = "0.3.7", features = ["deadpool-postgres"] }
+parsql-macros = "0.4.0"
 ```
 
 ## Security Features

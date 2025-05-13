@@ -2,9 +2,8 @@
 //!
 //! This module provides functions for performing CRUD operations within a transaction.
 
-use rusqlite::{Connection, Transaction, Error, ToSql};
-use crate::crud_ops::CrudOps;
-use crate::{SqlParams, SqlQuery, UpdateParams, FromRow};
+use rusqlite::{types::FromSql, Connection, Error, ToSql, Transaction};
+use crate::traits::{SqlParams, SqlQuery, UpdateParams, FromRow, CrudOps};
 
 /// Implementation of CrudOps for Transaction
 impl<'conn> CrudOps for Transaction<'conn> {
@@ -46,7 +45,7 @@ impl<'conn> CrudOps for Transaction<'conn> {
     ///     Ok(())
     /// }
     /// ```
-    fn insert<T: SqlQuery + SqlParams>(&self, entity: T) -> Result<usize, Error> {
+    fn insert<T: SqlQuery + SqlParams, P: for<'a> FromSql + Send + Sync>(&self, entity: T) -> Result<P, Error> {
         let sql = T::query();
         
         // Debug log the SQL query
@@ -56,7 +55,7 @@ impl<'conn> CrudOps for Transaction<'conn> {
         let params = entity.params();
         let param_refs: Vec<&dyn ToSql> = params.iter().map(|p| *p as &dyn ToSql).collect();
         
-        self.execute(&sql, param_refs.as_slice())
+        self.query_row(&sql, param_refs.as_slice(), |row| row.get(0))
     }
 
     /// Updates a record in the database and returns the number of rows affected.
@@ -472,10 +471,10 @@ pub fn begin(conn: &Connection) -> Result<Transaction<'_>, Error> {
 ///     Ok(())
 /// }
 /// ```
-pub fn tx_insert<'a, T: SqlQuery + SqlParams>(
+pub fn tx_insert<'a, T: SqlQuery + SqlParams, P: for<'b> FromSql + Send + Sync>(
     tx: Transaction<'a>,
     entity: T,
-) -> Result<(Transaction<'a>, usize), Error> {
+) -> Result<(Transaction<'a>, P), Error> {
     let result = tx.insert(entity)?;
     Ok((tx, result))
 }

@@ -1,17 +1,18 @@
-use postgres::{Transaction, Error, Row};
-use crate::{SqlQuery, SqlParams, FromRow, UpdateParams, CrudOps};
+use postgres::{types::FromSql, Error, Row, Transaction};
+use crate::traits::{SqlQuery, SqlParams, FromRow, UpdateParams, CrudOps};
 
 /// CrudOps trait implementasyonu Transaction<'_> için.
 /// Bu sayede transaction içinde tüm CRUD işlemleri extension metotları olarak kullanılabilir.
 impl<'a> CrudOps for Transaction<'a> {
-    fn insert<T: SqlQuery + SqlParams>(&mut self, entity: T) -> Result<u64, Error> {
+    fn insert<T: SqlQuery + SqlParams, P:for<'b> FromSql<'b> + Send + Sync>(&mut self, entity: T) -> Result<P, Error> {
         let sql = T::query();
         if std::env::var("PARSQL_TRACE").unwrap_or_default() == "1" {
             println!("[PARSQL-POSTGRES] Execute SQL (Transaction): {}", sql);
         }
 
         let params = entity.params();
-        self.execute(&sql, &params)
+        let row = self.query_one(&sql, &params)?;
+        row.try_get::<_, P>(0)
     }
 
     fn update<T: SqlQuery + UpdateParams>(&mut self, entity: T) -> Result<u64, Error> {
@@ -134,7 +135,7 @@ pub fn begin<'a>(client: &'a mut postgres::Client) -> Result<Transaction<'a>, Er
 /// - `entity`: Eklenecek veri nesnesi (SqlQuery ve SqlParams trait'lerini implement etmeli)
 /// 
 /// ## Dönüş Değeri
-/// - `Result<(Transaction<'_>, u64), Error>`: Başarılı olursa, transaction ve etkilenen kayıt sayısını döner; hata durumunda Error döner
+/// - `Result<(Transaction<'_>, P), Error>`: Başarılı olursa, transaction ve etkilenen kayıt sayısını döner; hata durumunda Error döner
 /// 
 /// ## Örnek Kullanım
 /// ```rust,no_run
@@ -170,11 +171,11 @@ pub fn begin<'a>(client: &'a mut postgres::Client) -> Result<Transaction<'a>, Er
 ///     Ok(())
 /// }
 /// ```
-pub fn tx_insert<'a, T>(mut tx: Transaction<'a>, entity: T) -> Result<(Transaction<'a>, u64), Error>
+pub fn tx_insert<'a, T, P:for<'b> FromSql<'b> + Send + Sync>(mut tx: Transaction<'a>, entity: T) -> Result<(Transaction<'a>, P), Error>
 where
     T: SqlQuery + SqlParams,
 {
-    let result = tx.insert(entity)?;
+    let result = tx.insert::<T, P>(entity)?;
     Ok((tx, result))
 }
 

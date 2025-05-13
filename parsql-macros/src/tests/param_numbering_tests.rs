@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod param_numbering_tests {
-    use crate::crud_impl::{number_where_clause_params, SqlParamCounter};
+    use crate::{number_where_clause_params, SqlParamCounter};
 
     /// Test basic parameter numbering with new counter
     #[test]

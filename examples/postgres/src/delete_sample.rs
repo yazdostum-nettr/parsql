@@ -1,6 +1,6 @@
-use parsql::{
+use parsql::postgres::{
     macros::{Deletable, SqlParams},
-    postgres::{SqlParams, SqlQuery},
+    traits::{SqlParams, SqlQuery},
 };
 use postgres::types::ToSql;
 
@@ -10,4 +10,3 @@ use postgres::types::ToSql;
 pub struct DeleteUser {
     pub id: i32,
 }
-

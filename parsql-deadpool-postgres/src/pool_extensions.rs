@@ -1,6 +1,7 @@
 use deadpool_postgres::Pool;
+use postgres::types::FromSql;
 use tokio_postgres::{Error, Row};
-use crate::{SqlQuery, SqlParams, UpdateParams, FromRow};
+use crate::traits::{SqlQuery, SqlParams, UpdateParams, FromRow, CrudOps};
 
 // Daha basit bir yaklaşım: PoolError'dan genel bir Error oluştur
 fn pool_err_to_io_err(e: deadpool_postgres::PoolError) -> Error {
@@ -14,96 +15,10 @@ fn pool_err_to_io_err(e: deadpool_postgres::PoolError) -> Error {
     err
 }
 
-/// CrudOps trait'i, Pool nesnesi için CRUD işlemlerini extension method olarak sağlar.
-/// Bu trait, Pool üzerinde doğrudan CRUD işlemlerini çağırmayı mümkün kılar.
-#[async_trait::async_trait]
-pub trait CrudOps {
-    /// Veritabanına yeni bir kayıt ekler.
-    /// 
-    /// # Parametreler
-    /// * `entity` - Eklenecek veri nesnesi (SqlQuery ve SqlParams trait'lerini uygulamalıdır)
-    /// 
-    /// # Dönüş Değeri
-    /// * `Result<u64, Error>` - Eklenen kayıt sayısı veya hata
-    async fn insert<T>(&self, entity: T) -> Result<u64, Error>
-    where
-        T: SqlQuery + SqlParams + Send + Sync;
-    
-    /// Veritabanındaki mevcut bir kaydı günceller.
-    /// 
-    /// # Parametreler
-    /// * `entity` - Güncelleme bilgilerini içeren veri nesnesi (SqlQuery ve UpdateParams trait'lerini uygulamalıdır)
-    /// 
-    /// # Dönüş Değeri
-    /// * `Result<u64, Error>` - Güncellenen kayıt sayısı veya hata
-    async fn update<T>(&self, entity: T) -> Result<u64, Error>
-    where
-        T: SqlQuery + UpdateParams + Send + Sync;
-    
-    /// Veritabanından bir kaydı siler.
-    /// 
-    /// # Parametreler
-    /// * `entity` - Silinecek kaydın bilgilerini içeren veri nesnesi (SqlQuery ve SqlParams trait'lerini uygulamalıdır)
-    /// 
-    /// # Dönüş Değeri
-    /// * `Result<u64, Error>` - Silinen kayıt sayısı veya hata
-    async fn delete<T>(&self, entity: T) -> Result<u64, Error>
-    where
-        T: SqlQuery + SqlParams + Send + Sync;
-    
-    /// Belirtilen kriterlere uygun tek bir kaydı getirir.
-    /// 
-    /// # Parametreler
-    /// * `params` - Sorgu parametreleri (SqlQuery, FromRow ve SqlParams trait'lerini uygulamalıdır)
-    /// 
-    /// # Dönüş Değeri
-    /// * `Result<T, Error>` - Getirilen kayıt veya hata
-    async fn fetch<T>(&self, params: &T) -> Result<T, Error>
-    where
-        T: SqlQuery + FromRow + SqlParams + Send + Sync;
-    
-    /// Belirtilen kriterlere uygun tüm kayıtları getirir.
-    /// 
-    /// # Parametreler
-    /// * `params` - Sorgu parametreleri (SqlQuery, FromRow ve SqlParams trait'lerini uygulamalıdır)
-    /// 
-    /// # Dönüş Değeri
-    /// * `Result<Vec<T>, Error>` - Getirilen kayıtlar veya hata
-    async fn fetch_all<T>(&self, params: &T) -> Result<Vec<T>, Error>
-    where
-        T: SqlQuery + FromRow + SqlParams + Send + Sync;
-    
-    /// Belirtilen özel dönüşüm fonksiyonunu kullanarak tek bir kaydı getirir.
-    /// 
-    /// # Parametreler
-    /// * `entity` - Sorgu parametreleri (SqlQuery ve SqlParams trait'lerini uygulamalıdır)
-    /// * `to_model` - Row -> R dönüşümünü gerçekleştiren fonksiyon
-    /// 
-    /// # Dönüş Değeri
-    /// * `Result<R, Error>` - Dönüştürülen kayıt veya hata
-    async fn select<T, R, F>(&self, entity: T, to_model: F) -> Result<R, Error>
-    where
-        T: SqlQuery + SqlParams + Send + Sync,
-        F: FnOnce(&Row) -> Result<R, Error> + Send + Sync;
-    
-    /// Belirtilen özel dönüşüm fonksiyonunu kullanarak tüm kayıtları getirir.
-    /// 
-    /// # Parametreler
-    /// * `entity` - Sorgu parametreleri (SqlQuery ve SqlParams trait'lerini uygulamalıdır)
-    /// * `to_model` - Row -> R dönüşümünü gerçekleştiren fonksiyon
-    /// 
-    /// # Dönüş Değeri
-    /// * `Result<Vec<R>, Error>` - Dönüştürülen kayıtlar veya hata
-    async fn select_all<T, R, F>(&self, entity: T, to_model: F) -> Result<Vec<R>, Error>
-    where
-        T: SqlQuery + SqlParams + Send + Sync,
-        F: Fn(&Row) -> R + Send + Sync;
-}
-
 /// Pool nesnesi için CrudOps trait'inin implementasyonu
 #[async_trait::async_trait]
 impl CrudOps for Pool {
-    async fn insert<T>(&self, entity: T) -> Result<u64, Error>
+    async fn insert<T, P:for<'a> FromSql<'a> + Send + Sync>(&self, entity: T) -> Result<P, Error>
     where
         T: SqlQuery + SqlParams + Send + Sync
     {
@@ -115,7 +30,8 @@ impl CrudOps for Pool {
         }
 
         let params = entity.params();
-        client.execute(&sql, &params).await
+        let row = client.query_one(&sql, &params).await?;
+        row.try_get::<_, P>(0)
     }
 
     async fn update<T>(&self, entity: T) -> Result<u64, Error>

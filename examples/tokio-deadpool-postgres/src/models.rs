@@ -1,12 +1,16 @@
 use chrono::{DateTime, Utc};
-use parsql::macros::{Deletable, Insertable, Queryable, Updateable, FromRow as DeriveFromRow, SqlParams as DeriveSqlParams, UpdateParams as DeriveUpdateParams};
-use parsql::deadpool_postgres::{SqlQuery, SqlParams, UpdateParams, FromRow};
+use parsql::deadpool_postgres::{
+    traits::{SqlParams, SqlQuery, UpdateParams, FromRow},
+    macros::{Insertable, Updateable, Queryable, Deletable, FromRow, SqlParams, UpdateParams},
+};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::{types::ToSql, Row, Error};
+use uuid::Uuid;
 
 // Kullanıcı ekleme modeli
-#[derive(Debug, Clone, Serialize, Deserialize, Insertable, DeriveSqlParams)]
+#[derive(Debug, Clone, Serialize, Deserialize, Insertable, SqlParams)]
 #[table("users")]
+#[returning("id")]
 pub struct UserInsert {
     pub name: String,
     pub email: String,
@@ -14,7 +18,7 @@ pub struct UserInsert {
 }
 
 // Kullanıcı güncelleme modeli
-#[derive(Debug, Clone, Serialize, Deserialize, Updateable, DeriveUpdateParams)]
+#[derive(Debug, Clone, Serialize, Deserialize, Updateable, UpdateParams)]
 #[table("users")]
 #[update("name, email")]
 #[where_clause("id = $")]
@@ -25,7 +29,7 @@ pub struct UserUpdate {
 }
 
 // Kullanıcı silme modeli
-#[derive(Debug, Clone, Serialize, Deserialize, Deletable, DeriveSqlParams)]
+#[derive(Debug, Clone, Serialize, Deserialize, Deletable, SqlParams)]
 #[table("users")]
 #[where_clause("id = $")]
 pub struct UserDelete {
@@ -33,7 +37,7 @@ pub struct UserDelete {
 }
 
 // ID'ye göre kullanıcı getirme modeli
-#[derive(Debug, Clone, Serialize, Deserialize, Queryable, DeriveFromRow, DeriveSqlParams)]
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable, FromRow, SqlParams)]
 #[table("users")]
 #[select("id, name, email, state")]
 #[where_clause("id = $")]
@@ -45,7 +49,7 @@ pub struct UserById {
 }
 
 // State'e göre kullanıcıları getirme modeli
-#[derive(Debug, Clone, Serialize, Deserialize, Queryable, DeriveFromRow, DeriveSqlParams)]
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable, FromRow, SqlParams)]
 #[table("users")]
 #[select("id, name, email, state")]
 #[where_clause("state = $")]
@@ -58,12 +62,21 @@ pub struct UsersByState {
 }
 
 // Özel sorgu için model
-#[derive(Queryable, DeriveSqlParams)]
+#[derive(Queryable, SqlParams)]
 #[table("users")]
 #[select("id, name, email, CASE WHEN state = 1 THEN 'Aktif' ELSE 'Pasif' END as status")]
 #[where_clause("state = $")]
 pub struct UserStatusQuery {
     pub state: i16,
+}
+
+// Blog ekleme modeli
+#[derive(Debug, Clone, Serialize, Deserialize, Insertable, SqlParams)]
+#[table("blogs")]
+#[returning("id")]
+pub struct InsertBlog {
+    pub title: String,
+    pub content: Option<String>,
 }
 
 // Kullanıcı ekleme modeli için yardımcı metotlar
@@ -123,5 +136,15 @@ impl UsersByState {
 impl UserStatusQuery {
     pub fn new(state: i16) -> Self {
         Self { state }
+    }
+}
+
+// Blog ekleme modeli için yardımcı metotlar
+impl InsertBlog {
+    pub fn new(title: &str, content: Option<&str>) -> Self {
+        Self {
+            title: title.to_string(),
+            content: content.map(|s| s.to_string()),
+        }
     }
 } 

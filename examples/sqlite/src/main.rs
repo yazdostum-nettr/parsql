@@ -1,23 +1,31 @@
-use parsql::sqlite::{get, insert, update, delete, get_all};
-use rusqlite::{Connection, Result, Error};
+use parsql::sqlite::{
+    crud_ops::get,
+    delete, insert,
+    macros::{Deletable, Insertable, Queryable, SqlParams, UpdateParams, Updateable},
+    traits::{CrudOps, FromRow, SqlParams, SqlQuery, UpdateParams},
+    update,
+};
+use rusqlite::{Connection, Error, Result};
 
 // Modülleri import et
 mod models;
 mod pagination_sample;
 
 // Modüllerden yapıları import et
-use models::user::{InsertUser, UpdateUser, GetUser, GetUserByName, DeleteUser};
 use models::stats::UserPostStatsAdvanced;
-use pagination_sample::{run_pagination_examples, run_derive_pagination_examples};
+use models::user::{DeleteUser, GetUser, GetUserByName, InsertUser, UpdateUser};
+use pagination_sample::{run_derive_pagination_examples, run_pagination_examples};
 
 fn main() {
     // PARSQL_TRACE çevre değişkenini ayarla
     std::env::set_var("PARSQL_TRACE", "1");
-    
+
     let conn = Connection::open("sqlite_db.db3").unwrap();
 
     // Tabloları oluştur ve örnek veriler ekle
-    let _ = conn.execute_batch("
+    let _ = conn
+        .execute_batch(
+            "
         DROP TABLE IF EXISTS comments;
         DROP TABLE IF EXISTS posts;
         DROP TABLE IF EXISTS users;
@@ -85,7 +93,9 @@ fn main() {
             ('user18', 'user18@example.com', 1),
             ('user19', 'user19@example.com', 1),
             ('user20', 'user20@example.com', 2);
-    ").expect("Tablo oluşturma işlemi başarısız oldu!");
+    ",
+        )
+        .expect("Tablo oluşturma işlemi başarısız oldu!");
 
     let insert_usert = InsertUser {
         name: "Ali".to_string(),
@@ -93,11 +103,15 @@ fn main() {
         state: 1,
     };
 
-    let insert_result = insert(&conn, insert_usert);
-    println!("işlem başarıyla tamamlandı! Sonuç: {:?}", insert_result);
+    let insert_result = insert::<InsertUser, i64>(&conn, insert_usert);
+    let last_id = conn.last_insert_rowid();
+    println!(
+        "işlem başarıyla tamamlandı! Sonuç: {:?}, Son eklenen ID: {}",
+        insert_result, last_id
+    );
 
     let update_user = UpdateUser {
-        id: 1,
+        id: last_id,
         name: String::from("Ali"),
         email: String::from("ali@gmail.com"),
         state: 2,
@@ -113,13 +127,13 @@ fn main() {
         state: Default::default(),
     };
 
-    let get_user_result = get(&conn, &get_user);
+    let get_user_result = conn.fetch(&get_user);
 
     println!("get user result: {:?}", get_user_result);
 
     // SQL Injection Denemesi
     let malicious_name = "' OR '1'='1";
-    
+
     let get_user = GetUserByName {
         id: 0,
         name: malicious_name.to_string(),
@@ -140,31 +154,34 @@ fn main() {
         state: 0,
     };
 
-    match get(&conn, &get_user) {
+    match conn.fetch(&get_user) {
         Ok(user) => println!("Bulunan kullanıcı: {:?}", user),
         Err(e) => println!("Hata: {}", e),
     }
 
     // UserPostStatsAdvanced örneği
     let stats_query = UserPostStatsAdvanced::new(0);
-    
+
     match get(&conn, &stats_query) {
         Ok(stats) => println!("Gelişmiş kullanıcı-gönderi istatistikleri: {:?}", stats),
         Err(e) => println!("İstatistik sorgulama hatası: {}", e),
     }
-    
+
     // Tüm istatistikleri getirme örneği
     println!("\nTüm gelişmiş kullanıcı-gönderi istatistikleri:");
-    
+
     // DELETE işlemi (doğrudan SQL sorgusu ile)
     let user_id_to_delete = 3;
-    let delete_user = DeleteUser { id: user_id_to_delete };
-    let deleted_rows = delete(&conn, delete_user);  
+    let delete_user = DeleteUser {
+        id: user_id_to_delete,
+    };
+    let deleted_rows = delete(&conn, delete_user);
     println!("Silinen satır sayısı: {:?}", deleted_rows);
 
     // 5. Sayfalama Örnekleri
     run_pagination_examples(&conn).expect("Manuel sayfalama örnekleri başarısız oldu");
 
     // 6. Derive Macro ile Sayfalama Örnekleri
-    run_derive_pagination_examples(&conn).expect("Derive macro ile sayfalama örnekleri başarısız oldu");
+    run_derive_pagination_examples(&conn)
+        .expect("Derive macro ile sayfalama örnekleri başarısız oldu");
 }

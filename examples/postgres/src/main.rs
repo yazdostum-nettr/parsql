@@ -1,4 +1,4 @@
-use std::default;
+use std::{default, env};
 
 use example_parsql_postgres::{
     insert_sample::{InsertComment, InsertPost},
@@ -10,8 +10,10 @@ use parsql::postgres::{get_all, insert, select, update, delete};
 use postgres::{Client, NoTls};
 
 fn init_connection() -> Client {
+    let host = env::var("DB_HOST").unwrap_or_else(|_| "localhost".to_string());
+
     let mut client = Client::connect(
-        "host=localhost user=myuser password=mypassword dbname=sample_db",
+        &format!("host={} user=myuser password=mypassword dbname=sample_db", host),
         NoTls,
     )
     .expect("Postgresql ile bağlantı aşamasında bir hata oluştu!");
@@ -113,7 +115,7 @@ fn main() {
         state: 1_i16,
     };
 
-    let insert_result = insert(&mut db, insert_user);
+    let insert_result = insert::<InsertUser, i64>(&mut db, insert_user);
     println!("Insert result: {:?}", insert_result);
 
     let insert_post = InsertPost {
@@ -122,7 +124,7 @@ fn main() {
         state: 1_i16,
     };
 
-    let insert_result = insert(&mut db, insert_post);
+    let insert_result = insert::<InsertPost, i64>(&mut db, insert_post);
     println!("Insert result: {:?}", insert_result);
 
     let insert_comment = InsertComment {
@@ -131,7 +133,7 @@ fn main() {
         state: 1,
     };
 
-    let insert_result = insert(&mut db, insert_comment);
+    let insert_result = insert::<InsertComment, i64>(&mut db, insert_comment);
     println!("Insert result: {:?}", insert_result);
 
     let update_user = UpdateUser {

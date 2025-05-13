@@ -52,28 +52,28 @@ Cargo.toml içinde aşağıdaki şekilde tanımlama yapın:
 
 ```toml
 [dependencies]
-parsql = { version = "0.3.7", features = ["sqlite"] }
+parsql = { version = "0.4.0", features = ["sqlite"] }
 ```
 
 veya PostgreSQL için:
 
 ```toml
 [dependencies]
-parsql = { version = "0.3.7", features = ["postgres"] }
+parsql = { version = "0.4.0", features = ["postgres"] }
 ```
 
 veya Tokio PostgreSQL için:
 
 ```toml
 [dependencies]
-parsql = { version = "0.3.7", features = ["tokio-postgres"] }
+parsql = { version = "0.4.0", features = ["tokio-postgres"] }
 ```
 
 veya Deadpool PostgreSQL için:
 
 ```toml
 [dependencies]
-parsql = { version = "0.3.7", features = ["deadpool-postgres"] }
+parsql = { version = "0.4.0", features = ["deadpool-postgres"] }
 ```
 
 ## Temel Özellikler

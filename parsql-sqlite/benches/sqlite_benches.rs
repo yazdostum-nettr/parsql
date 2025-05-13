@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use parsql_macros::{Insertable, SqlParams};
-use parsql_sqlite::{insert, SqlParams, SqlQuery};
+use parsql_sqlite::{insert, traits::{SqlParams, SqlQuery}};
 use rusqlite::{types::ToSql, Connection};
 
 #[derive(Insertable, SqlParams)]
@@ -41,7 +41,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 email: "SampleEmail".to_string(),
                 state: 1,
             });
-            let _ = insert(&db, user);
+            let _ = insert::<InsertUser, i32>(&db, user);
         })
     });
 }

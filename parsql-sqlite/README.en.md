@@ -51,15 +51,7 @@ Add to your Cargo.toml file as follows:
 
 ```toml
 [dependencies]
-parsql = { version = "0.3.7", features = ["sqlite"] }
-```
-
-or if you want to use this package directly:
-
-```toml
-[dependencies]
-parsql-sqlite = "0.3.7"
-parsql-macros = "0.3.7"
+parsql = { version = "0.4.0", features = ["sqlite"] }
 ```
 
 ## Usage
@@ -125,7 +117,7 @@ fn main() -> Result<()> {
         name: "John".to_string(),
         email: "john@example.com".to_string(),
     };
-    let rows_affected = insert(&conn, insert_user)?;
+    let inserted_record_id = conn.insert::<InsertUser, i64>(insert_user)?;
     
     // Get a user with function approach
     let get_user = GetUser {
